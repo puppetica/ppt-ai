@@ -1,6 +1,14 @@
-defaults:
-  - datasets: bdd100k
-  - _self_
+datasets:
+  - name: comma10k
+    crop_height: 256
+    crop_width: 960
+    scale: 1.0
+    root_dir: "/datasets/comma10k/imgs"
+  - name: bdd100k
+    crop_height: 256
+    crop_width: 960
+    scale: 1.0
+    root_dir: "/datasets/BDD100k/bdd100k/images"
 
 model:
   lr: 1e-4

@@ -1,6 +1,0 @@
-_target_: autoencoder.data.datasets.bdd100k.Bdd100k
-# org img size: 720x1280
-crop_height: 256
-crop_width: 960
-scale: 1.0
-root_dir: "/datasets/BDD100k/bdd100k/images"

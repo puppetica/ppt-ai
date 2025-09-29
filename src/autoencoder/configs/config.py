@@ -3,18 +3,12 @@ from typing import Any
 from pydantic import BaseModel
 
 
-class Bdd100kCfg(BaseModel):
-    data_dir: str
+class ImgDataset(BaseModel):
+    name: str
     crop_height: int
     crop_width: int
     scale: float
-
-
-class Comma10kCfg(BaseModel):
-    data_dir: str
-    crop_height: int
-    crop_width: int
-    scale: float
+    root_dir: str
 
 
 class ModelCfg(BaseModel):
@@ -26,7 +20,7 @@ class ModelCfg(BaseModel):
 
 
 class TrainCfg(BaseModel):
-    datasets: dict[str, Any]
+    datasets: list[ImgDataset]
     model: ModelCfg
     max_epochs: int
     accelerator: str

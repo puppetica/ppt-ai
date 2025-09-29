@@ -1,6 +1,0 @@
-_target_: autoencoder.data.datasets.comma10k.Comma10k
-# org img size: 874x1164
-crop_height: 256
-crop_width: 960
-scale: 1.0
-root_dir: "/datasets/comma10k/imgs"
