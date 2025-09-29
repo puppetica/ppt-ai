@@ -16,7 +16,7 @@ In VS Code press ctrl+shift+P and search for "Dev Containers: Rebuild and Reopen
 
 ## Container Usage
 #### Container already in use
-```
+```log
 Error response from daemon: Conflict. The container name "/ppt-ai-dev" is already in use by container "fbb94ded6b754f6629d3fb197e05f32d9cafd73f97ade0032e2edaa440da25db". You have to remove (or rename) that container to be able to reuse that name.
 ```
 In case something crashed it can happen that the dev container has not shut down. In this case you have to manually stop it: `docker stop ppt-ai-dev && docker rm ppt-ai-dev`
