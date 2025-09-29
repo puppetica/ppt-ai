@@ -1,0 +1,27 @@
+{
+  "name": "bp pytorch dev",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "ppt-ai-dev",
+  "workspaceFolder": "/workspace",
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspace,type=bind"
+  ],
+  "containerEnv": {
+    "PYTHONPATH": "/workspace/src"
+  },
+  "remoteUser": "root",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.debugpy",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "ms-toolsai.jupyter"
+      ]
+    },
+    "settings": {
+      "git.path": "/usr/bin/git"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+services:
+  ppt-ai-dev:
+    build: .
+    container_name: ppt-ai-dev
+    tty: true
+    stdin_open: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ./workspace:/workspace
+      - ~/datasets:/datasets
+    working_dir: /workspace
+    network_mode: host
+    ipc: host

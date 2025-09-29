@@ -1,0 +1,24 @@
+[tool.ruff]
+indent-width = 4
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+indent-style = "space"
+line-ending = "auto"
+quote-style = "double"
+skip-magic-trailing-comma = false
+exclude = [ "*.ipynb" ]
+
+[tool.ruff.lint]
+# Add any linter rules from here: https://docs.astral.sh/ruff/rules/
+select = ["E4", "E7", "E9", "F"]
+unfixable = ["F401"]
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma = true
+
+[tool.pyright]
+typeCheckingMode="basic"

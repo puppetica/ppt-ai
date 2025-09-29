@@ -1,0 +1,37 @@
+from typing import Any
+
+from pydantic import BaseModel
+
+
+class Comma10kCfg(BaseModel):
+    data_dir: str
+    crop_height: int
+    crop_width: int
+    scale: float
+
+
+class ModelCfg(BaseModel):
+    lr: float
+    in_ch: int
+    res_block_ch: list[int]
+    num_attn_blocks: int
+    adv_weight: float
+
+
+class TrainCfg(BaseModel):
+    datasets: dict[str, Any]
+    model: ModelCfg
+    max_epochs: int
+    accelerator: str
+    devices: int
+    batch_size: int
+    num_workers: int
+
+
+class PredictCfg(BaseModel):
+    datasets: dict[str, Any]
+    accelerator: str
+    devices: int
+    batch_size: int
+    num_workers: int
+    run_profiler: bool

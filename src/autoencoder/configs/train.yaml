@@ -1,0 +1,17 @@
+defaults:
+  - datasets: comma10k
+  - _self_
+
+model:
+  lr: 1e-4
+  in_ch: 3
+  res_block_ch: [32, 64, 64, 128, 128, 256]
+  num_attn_blocks: 3
+  adv_weight: 0.01
+
+max_epochs: 8
+accelerator: gpu
+devices: 1
+batch_size: 4
+num_workers: 1
+run_profiler: False
