@@ -1,6 +1,6 @@
 from torch import nn
 
-from autoencoder.models.layers import ResBlock, SpatialMHABlock, get_2d_sincos_pos_embed
+from common.layers import ResBlock, SpatialMHABlock, get_2d_sincos_pos_embed
 
 
 class Decoder(nn.Module):
@@ -17,7 +17,7 @@ class Decoder(nn.Module):
         self._cached_key = None
 
         # Bottleneck attention (same as encoder)
-        self.attn = nn.Sequential(*[SpatialMHABlock(dim=res_block_ch[-1], num_heads=8) for _ in range(num_attn_blocks)])
+        self.attn = nn.Sequential(*[SpatialMHABlock(dim=res_block_ch[-1], num_heads=6) for _ in range(num_attn_blocks)])
 
         # ResNet + Upsample stack (reverse order of encoder)
         self.res_layers = nn.ModuleList()

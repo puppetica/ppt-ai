@@ -1,5 +1,5 @@
 {
-  "name": "bp pytorch dev",
+  "name": "ppt-ai-dev",
   "dockerComposeFile": "docker-compose.yml",
   "service": "ppt-ai-dev",
   "workspaceFolder": "/workspace",

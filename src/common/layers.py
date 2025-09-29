@@ -4,6 +4,33 @@ import torch
 import torch.nn as nn
 
 
+class DropPath(nn.Module):
+    """Stochastic Depth per sample (residual path)."""
+
+    def __init__(self, drop_prob: float = 0.1):
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def drop_path(self, x, drop_prob: float = 0.0, training: bool = False):
+        """Drop paths (Stochastic Depth) per sample.
+        Args:
+            x: input tensor
+            drop_prob: probability of dropping paths
+            training: apply only during training
+        """
+        if drop_prob == 0.0 or not training:
+            return x
+        keep_prob = 1 - drop_prob
+        # Work with broadcast along non-batch dims
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+        random_tensor.floor_()  # binarize
+        return x.div(keep_prob) * random_tensor
+
+    def forward(self, x):
+        return self.drop_path(x, self.drop_prob, self.training)
+
+
 class ResBlock(nn.Module):
     def __init__(self, ch, dropout=0.0):
         super().__init__()
@@ -28,7 +55,7 @@ class ResBlock(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, dim, mlp_ratio=4.0, dropout=0.0):
+    def __init__(self, dim, mlp_ratio=2.0, dropout=0.1):
         super().__init__()
         hidden = int(dim * mlp_ratio)
         self.fc1 = nn.Linear(dim, hidden)
@@ -51,11 +78,11 @@ class SpatialMHABlock(nn.Module):
     Input/Output: (B, C, H, W)
     """
 
-    def __init__(self, dim, num_heads=8, mlp_ratio=4.0, attn_dropout=0.1, proj_dropout=0.1):
+    def __init__(self, dim, num_heads=8, mlp_ratio=4.0, attn_dropout=0.1, proj_dropout=0.1, drop_path=0.0):
         super().__init__()
         self.norm1 = nn.LayerNorm(dim)
         self.attn = nn.MultiheadAttention(embed_dim=dim, num_heads=num_heads, dropout=attn_dropout, batch_first=True)
-        self.drop_path = nn.Identity()  # hook for stochastic depth if needed # TODO: WHats that?
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(dim)
         self.mlp = MLP(dim, mlp_ratio=mlp_ratio, dropout=proj_dropout)
 
@@ -64,9 +91,9 @@ class SpatialMHABlock(nn.Module):
         tokens = x.permute(0, 2, 3, 1).reshape(B, H * W, C)  # (B,N,C)
         h = self.norm1(tokens)
         attn_out, _ = self.attn(h, h, h, need_weights=False)
-        x_seq = tokens + attn_out
+        x_seq = tokens + self.drop_path(attn_out)
         h = self.norm2(x_seq)
-        x_seq = x_seq + self.mlp(h)
+        x_seq = x_seq + self.drop_path(self.mlp(h))
         # Back to image
         x = x_seq.reshape(B, H, W, C).permute(0, 3, 1, 2).contiguous()
         return x

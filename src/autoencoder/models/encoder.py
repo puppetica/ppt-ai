@@ -1,6 +1,6 @@
-from torch import nn
+from torch import linspace, nn
 
-from autoencoder.models.layers import ResBlock, SpatialMHABlock, get_2d_sincos_pos_embed
+from common.layers import ResBlock, SpatialMHABlock, get_2d_sincos_pos_embed
 
 
 class Encoder(nn.Module):
@@ -36,7 +36,10 @@ class Encoder(nn.Module):
             )
 
         # Bottleneck attention
-        self.attn = nn.Sequential(*[SpatialMHABlock(dim=res_block_ch[-1], num_heads=8) for _ in range(num_attn_blocks)])
+        dpr = linspace(0, 0.1, num_attn_blocks).tolist()  # from 0 → 0.1
+        self.attn = nn.Sequential(
+            *[SpatialMHABlock(dim=384, num_heads=6, drop_path=dpr[i]) for _ in range(num_attn_blocks)]
+        )
 
     def _pos_embed(self, x):
         B, C, H, W = x.shape

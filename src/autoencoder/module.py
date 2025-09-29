@@ -3,9 +3,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.decoder import Decoder
-from models.discriminator import Discriminator
-from models.encoder import Encoder
+from autoencoder.models.decoder import Decoder
+from autoencoder.models.discriminator import Discriminator
+from autoencoder.models.encoder import Encoder
 
 
 class AutoEncoder(pl.LightningModule):
@@ -42,7 +42,10 @@ class AutoEncoder(pl.LightningModule):
         real = batch
         fake = self.forward(real)
 
-        gen_opt, desc_opt = self.optimizers()
+        optimizers = self.optimizers()
+        assert isinstance(optimizers, list)
+        gen_opt = optimizers[0]
+        desc_opt = optimizers[1]
 
         # Train Discriminator
         pred_real = self.discriminator(real)

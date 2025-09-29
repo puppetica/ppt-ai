@@ -26,6 +26,7 @@ class TrainCfg(BaseModel):
     devices: int
     batch_size: int
     num_workers: int
+    run_profiler: bool
 
 
 class PredictCfg(BaseModel):
@@ -34,4 +35,3 @@ class PredictCfg(BaseModel):
     devices: int
     batch_size: int
     num_workers: int
-    run_profiler: bool
