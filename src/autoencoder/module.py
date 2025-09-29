@@ -1,7 +1,10 @@
+import os
+
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.utils as vutils
 
 from autoencoder.models.decoder import Decoder
 from autoencoder.models.discriminator import Discriminator
@@ -76,6 +79,19 @@ class AutoEncoder(pl.LightningModule):
         recon = self.forward(batch)
         l1_loss = self.l1(recon, batch)
         self.log("val_l1", l1_loss, prog_bar=True)
+
+        # Only save previews for the first 10 batches
+        if batch_idx < 4:
+            save_dir = os.path.join("preview", str(self.current_epoch))
+            os.makedirs(save_dir, exist_ok=True)
+
+            # Take one sample (e.g., the first in the batch)
+            gt = batch[0]
+            pred = recon[0]
+
+            # Normalize if needed (assumes images are in [-1, 1] or [0, 1])
+            grid = torch.cat([gt, pred], dim=-1)  # side by side
+            vutils.save_image(grid, os.path.join(save_dir, f"{batch_idx:03d}.png"))
 
     def configure_optimizers(self):
         gen_opt = torch.optim.Adam(

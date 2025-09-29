@@ -1,5 +1,5 @@
 defaults:
-  - datasets: comma10k
+  - datasets: bdd100k
   - _self_
 
 model:

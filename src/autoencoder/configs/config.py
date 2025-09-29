@@ -3,6 +3,13 @@ from typing import Any
 from pydantic import BaseModel
 
 
+class Bdd100kCfg(BaseModel):
+    data_dir: str
+    crop_height: int
+    crop_width: int
+    scale: float
+
+
 class Comma10kCfg(BaseModel):
     data_dir: str
     crop_height: int

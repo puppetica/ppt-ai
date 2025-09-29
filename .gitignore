@@ -3,3 +3,4 @@ lightning_logs/
 checkpoints/
 outputs/
 .pytest_cache/
+preview/
