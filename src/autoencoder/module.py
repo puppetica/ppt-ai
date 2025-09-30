@@ -40,43 +40,46 @@ class AutoEncoder(pl.LightningModule):
         return F.binary_cross_entropy_with_logits(pred, target)
 
     def training_step(self, batch, batch_idx):
-        real = batch
-        fake = self.forward(real)
-
         optimizers = self.optimizers()
         assert isinstance(optimizers, list)
         gen_opt = optimizers[0]
         desc_opt = optimizers[1]
 
-        # Train Discriminator
-        pred_real = self.discriminator(real)
-        pred_fake = self.discriminator(fake.detach())
-        loss_real = self.adversarial_loss(pred_real, True)
-        loss_fake = self.adversarial_loss(pred_fake, False)
-        d_loss = (loss_real + loss_fake) / 2
-        # Optimize Discriminator
-        desc_opt.zero_grad()
-        self.manual_backward(d_loss)
-        desc_opt.step()
-        self.log("d_loss", d_loss, prog_bar=True, on_step=False, on_epoch=True)
+        with torch.amp.autocast_mode.autocast("cuda", dtype=torch.float16):
+            real = batch
+            fake = self.forward(real)
 
-        # Train Generator
-        pred_fake = self.discriminator(fake)
-        l1_loss = self.l1(fake, real)
-        adv_loss = self.adversarial_loss(pred_fake, True)
-        g_loss = l1_loss + self.adv_weight * adv_loss
+            # Train Discriminator
+            pred_real = self.discriminator(real)
+            pred_fake = self.discriminator(fake.detach())
+            loss_real = self.adversarial_loss(pred_real, True)
+            loss_fake = self.adversarial_loss(pred_fake, False)
+            d_loss = (loss_real + loss_fake) / 2
+            # Optimize Discriminator
+            desc_opt.zero_grad()
+            self.manual_backward(d_loss)
+            desc_opt.step()
+            self.log("d_loss", d_loss, prog_bar=True)
+
+        with torch.amp.autocast_mode.autocast("cuda", dtype=torch.float16):
+            # Train Generator
+            pred_fake = self.discriminator(fake)
+            l1_loss = self.l1(fake, real)
+            adv_loss = self.adversarial_loss(pred_fake, True)
+            g_loss = l1_loss + self.adv_weight * adv_loss
+
         # Optimize Generator
         gen_opt.zero_grad()
         self.manual_backward(g_loss)
         gen_opt.step()
-        self.log("g_loss", g_loss, prog_bar=True, on_step=False, on_epoch=True)
-        self.log("g_l1", l1_loss, prog_bar=True, on_step=False, on_epoch=True)
-        self.log("g_adv", adv_loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log("g_loss", g_loss, prog_bar=True)
+        self.log("g_l1", l1_loss, prog_bar=True)
+        self.log("g_adv", adv_loss, prog_bar=True)
 
     def validation_step(self, batch, batch_idx):
         recon = self.forward(batch)
         l1_loss = self.l1(recon, batch)
-        self.log("val_l1", l1_loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log("val_l1", l1_loss, prog_bar=True)
 
         # save previews
         if batch_idx < 8:

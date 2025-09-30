@@ -49,6 +49,7 @@ def main(cfg_dict: DictConfig):
         res_block_ch=cfg.model.res_block_ch,
         num_attn_blocks=cfg.model.num_attn_blocks,
     )
+    # model = AutoEncoder.load_from_checkpoint(".logger/bbd_comma_epoch_7.ckpt")
     trainer = pl.Trainer(
         max_epochs=cfg.max_epochs,
         accelerator=cfg.accelerator,
@@ -56,6 +57,7 @@ def main(cfg_dict: DictConfig):
         callbacks=callbacks,
         enable_progress_bar=False if cfg.run_profiler else True,
         logger=data_logger,
+        log_every_n_steps=2000,
     )
     trainer.fit(model, datamodule=data_module)
 
