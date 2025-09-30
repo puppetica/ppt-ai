@@ -1,6 +1,5 @@
 __pycache__/
 lightning_logs/
-checkpoints/
+.logger/
 outputs/
 .pytest_cache/
-preview/

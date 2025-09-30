@@ -2,7 +2,6 @@ import time
 
 import pytorch_lightning as pl
 import torch
-from hydra.utils import instantiate
 from torch.utils.data import ConcatDataset, DataLoader, Dataset
 
 from autoencoder.data.datasets.bdd100k import Bdd100k

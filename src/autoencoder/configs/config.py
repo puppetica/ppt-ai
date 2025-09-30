@@ -20,14 +20,15 @@ class ModelCfg(BaseModel):
 
 
 class TrainCfg(BaseModel):
-    datasets: list[ImgDataset]
-    model: ModelCfg
+    name: str
     max_epochs: int
     accelerator: str
     devices: int
     batch_size: int
     num_workers: int
     run_profiler: bool
+    datasets: list[ImgDataset]
+    model: ModelCfg
 
 
 class PredictCfg(BaseModel):

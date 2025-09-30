@@ -1,14 +1,12 @@
-import os
-
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.utils as vutils
 
 from autoencoder.models.decoder import Decoder
 from autoencoder.models.discriminator import Discriminator
 from autoencoder.models.encoder import Encoder
+from common.logging.data_logger import DataLogger
 
 
 class AutoEncoder(pl.LightningModule):
@@ -21,9 +19,9 @@ class AutoEncoder(pl.LightningModule):
         adv_weight: float = 0.001,
     ):
         super().__init__()
+        self.logger: DataLogger
         self.automatic_optimization = False  # required for manual multi-opt
 
-        self.save_hyperparameters()
         self.lr = lr
         self.encoder = Encoder(in_ch, res_block_ch, num_attn_blocks)
         self.decoder = Decoder(in_ch, res_block_ch, num_attn_blocks)
@@ -60,7 +58,7 @@ class AutoEncoder(pl.LightningModule):
         desc_opt.zero_grad()
         self.manual_backward(d_loss)
         desc_opt.step()
-        self.log("d_loss", d_loss, prog_bar=True)
+        self.log("d_loss", d_loss, prog_bar=True, on_step=False, on_epoch=True)
 
         # Train Generator
         pred_fake = self.discriminator(fake)
@@ -71,27 +69,21 @@ class AutoEncoder(pl.LightningModule):
         gen_opt.zero_grad()
         self.manual_backward(g_loss)
         gen_opt.step()
-        self.log("g_loss", g_loss, prog_bar=True)
-        self.log("g_l1", l1_loss, prog_bar=True)
-        self.log("g_adv", adv_loss, prog_bar=True)
+        self.log("g_loss", g_loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log("g_l1", l1_loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log("g_adv", adv_loss, prog_bar=True, on_step=False, on_epoch=True)
 
     def validation_step(self, batch, batch_idx):
         recon = self.forward(batch)
         l1_loss = self.l1(recon, batch)
-        self.log("val_l1", l1_loss, prog_bar=True)
+        self.log("val_l1", l1_loss, prog_bar=True, on_step=False, on_epoch=True)
 
-        # Only save previews for the first 10 batches
-        if batch_idx < 4:
-            save_dir = os.path.join("preview", str(self.current_epoch))
-            os.makedirs(save_dir, exist_ok=True)
-
-            # Take one sample (e.g., the first in the batch)
+        # save previews
+        if batch_idx < 8:
             gt = batch[0]
             pred = recon[0]
-
-            # Normalize if needed (assumes images are in [-1, 1] or [0, 1])
             grid = torch.cat([gt, pred], dim=-1)  # side by side
-            vutils.save_image(grid, os.path.join(save_dir, f"{batch_idx:03d}.png"))
+            self.logger.log_image(grid, name=f"preview_{batch_idx:03d}.png", epoch=self.current_epoch)
 
     def configure_optimizers(self):
         gen_opt = torch.optim.Adam(

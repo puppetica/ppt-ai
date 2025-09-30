@@ -4,7 +4,7 @@ import time
 import torch
 from pytorch_lightning.callbacks import Callback
 
-logger = logging.getLogger("profiler")
+logger = logging.getLogger("common.callbacks.profiler")
 
 
 class ProfilerCallback(Callback):

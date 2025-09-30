@@ -1,3 +1,6 @@
+import logging
+from datetime import datetime
+
 import hydra
 import pytorch_lightning as pl
 from omegaconf import DictConfig, OmegaConf
@@ -8,17 +11,25 @@ from autoencoder.configs.config import TrainCfg
 from autoencoder.data.data_module import DataModule
 from autoencoder.module import AutoEncoder
 from common.callbacks.profiler import ProfilerCallback
+from common.logging.data_logger import DataLogger
+
+logger = logging.getLogger("autoencoder.train")
 
 
 @hydra.main(config_path="configs", config_name="train", version_base=None)
 def main(cfg_dict: DictConfig):
+    # Get config and generate name for the run
     cfg = TrainCfg.model_validate(cfg_dict)
-    print("\n" + OmegaConf.to_yaml(cfg_dict) + "\n")
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    name = f"{cfg.name}_{timestamp}"
+
+    data_logger = DataLogger(name=name)
+    data_logger.log_cfg(OmegaConf.to_yaml(cfg_dict))
 
     callbacks: list[Callback] = [
         ModelCheckpoint(
-            dirpath="checkpoints",
-            filename="latest",
+            dirpath=data_logger.save_dir,
+            filename=f"{name}_latest",
             save_last=True,
             save_top_k=0,
             every_n_epochs=1,
@@ -44,6 +55,7 @@ def main(cfg_dict: DictConfig):
         devices=cfg.devices,
         callbacks=callbacks,
         enable_progress_bar=False if cfg.run_profiler else True,
+        logger=data_logger,
     )
     trainer.fit(model, datamodule=data_module)
 
