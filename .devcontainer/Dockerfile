@@ -12,6 +12,8 @@ RUN pip install --no-cache-dir \
     pydantic~=2.11 \
     matplotlib~=3.10 \
     tensorboard~=2.20 \
+    mcap~=1.3 \
+    mcap-protobuf-support~=0.5 \
     pytest~=8.4 \
     debugpy \
     ipython

@@ -45,7 +45,7 @@ class AutoEncoder(pl.LightningModule):
         gen_opt = optimizers[0]
         desc_opt = optimizers[1]
 
-        with torch.amp.autocast_mode.autocast("cuda", dtype=torch.float16):
+        with torch.amp.autocast_mode.autocast("cuda", dtype=torch.bfloat16):
             real = batch
             fake = self.forward(real)
 
@@ -61,7 +61,7 @@ class AutoEncoder(pl.LightningModule):
             desc_opt.step()
             self.log("d_loss", d_loss, prog_bar=True)
 
-        with torch.amp.autocast_mode.autocast("cuda", dtype=torch.float16):
+        with torch.amp.autocast_mode.autocast("cuda", dtype=torch.bfloat16):
             # Train Generator
             pred_fake = self.discriminator(fake)
             l1_loss = self.l1(fake, real)
