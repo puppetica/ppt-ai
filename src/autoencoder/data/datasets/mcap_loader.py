@@ -1,10 +1,11 @@
+import math
 import os
 import random
 
 import torch
 from mcap.reader import make_reader
 from mcap_protobuf.decoder import DecoderFactory
-from torch.utils.data import IterableDataset
+from torch.utils.data import IterableDataset, get_worker_info
 from torchvision import io, transforms
 
 from autoencoder.enums import DataSplit
@@ -61,6 +62,16 @@ class McapImgLoader(IterableDataset):
 
     def __iter__(self):
         mcap_files = self.mcap_files.copy()
+
+        # Support multi processing
+        worker_info = get_worker_info()
+        if worker_info is not None:
+            n = len(self.mcap_files)
+            per_worker = int(math.ceil(n / worker_info.num_workers))
+            start = worker_info.id * per_worker
+            end = min(start + per_worker, n)
+            mcap_files = self.mcap_files[start:end]
+
         if self.data_split == DataSplit.TRAIN:
             random.shuffle(mcap_files)  # shuffle file order once per epoch
 
@@ -81,23 +92,3 @@ class McapImgLoader(IterableDataset):
                     img = self.transform(img)
                     yield img
                     frame_idx += 1
-
-
-# Chatgpt code for multi process / worker implementation
-# from torch.utils.data import get_worker_info
-
-# def __iter__(self):
-#     worker_info = get_worker_info()
-#     if worker_info is None:
-#         # single-process data loading
-#         iter_start = 0
-#         iter_end = len(self.data)
-#     else:
-#         # split workload across workers
-#         per_worker = int(math.ceil(len(self.data) / float(worker_info.num_workers)))
-#         worker_id = worker_info.id
-#         iter_start = worker_id * per_worker
-#         iter_end = min(iter_start + per_worker, len(self.data))
-
-#     for idx in range(iter_start, iter_end):
-#         yield self.data[idx]

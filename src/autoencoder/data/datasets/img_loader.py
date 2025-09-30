@@ -1,8 +1,9 @@
+import math
 import os
 import random
 
 import torch
-from torch.utils.data import IterableDataset
+from torch.utils.data import IterableDataset, get_worker_info
 from torchvision import io, transforms
 
 from autoencoder.enums import DataSplit
@@ -50,9 +51,19 @@ class ImgLoader(IterableDataset):
 
     def __iter__(self):
         files = self.files.copy()
+
+        # Support multi processing
+        worker_info = get_worker_info()
+        if worker_info is not None:
+            n = len(self.files)
+            per_worker = int(math.ceil(n / worker_info.num_workers))
+            start = worker_info.id * per_worker
+            end = min(start + per_worker, n)
+            files = self.files[start:end]
+
         if self.data_split == DataSplit.TRAIN:
-            random.shuffle(files)
-        files = files[:10]
+            random.shuffle(files)  # files must be copied!
+
         for path in files:
             img = io.read_image(path)
             img = self.transform(img)

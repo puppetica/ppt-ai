@@ -58,9 +58,9 @@ def main(cfg_dict: DictConfig):
         accelerator=cfg.accelerator,
         devices=cfg.devices,
         callbacks=callbacks,
-        enable_progress_bar=False,  # if cfg.run_profiler else True,
+        enable_progress_bar=False if cfg.run_profiler else True,
         logger=data_logger,
-        log_every_n_steps=2000,
+        log_every_n_steps=5000,
     )
     trainer.fit(model, datamodule=data_module)
 
