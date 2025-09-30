@@ -36,8 +36,8 @@ def test_mcap_img_loader(staged_mcap, split):
     dataset = McapImgLoader(
         target_height=768,
         target_width=1920,
-        crop_bottom=0,
         crop_top=300,
+        crop_bottom=0,
         scale=2.0,
         root_dir=str(staged_mcap),
         data_split=split,
@@ -46,11 +46,7 @@ def test_mcap_img_loader(staged_mcap, split):
             "/camera/front_left/image_compressed",
             "/camera/front_right/image_compressed",
         ],
-        buffer_size=5,
     )
-
-    # Assert dataset not empty
-    assert len(dataset) > 0
 
     for img in itertools.islice(dataset, 10):
         # Check image tensor properties

@@ -3,6 +3,17 @@ from typing import Any
 from pydantic import BaseModel
 
 
+class McapLoaderCfg(BaseModel):
+    type: str
+    target_height: int
+    target_width: int
+    crop_top: int
+    crop_bottom: int
+    scale: float
+    root_dir: str
+    topics: list[str]
+
+
 class ImgLoaderCfg(BaseModel):
     type: str
     target_height: int
@@ -29,7 +40,7 @@ class TrainCfg(BaseModel):
     batch_size: int
     num_workers: int
     run_profiler: bool
-    datasets: list[ImgLoaderCfg]
+    datasets: list[ImgLoaderCfg | McapLoaderCfg]
     model: ModelCfg
 
 

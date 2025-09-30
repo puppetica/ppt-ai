@@ -3,7 +3,7 @@ max_epochs: 40
 accelerator: gpu
 devices: 1
 batch_size: 8
-num_workers: 1
+num_workers: 1  # TODO: IterDatasets need special handling for workers > 1!
 run_profiler: False
 
 datasets:
@@ -14,6 +14,7 @@ datasets:
     crop_bottom: 170
     scale: 1.0
     root_dir: "/datasets/comma10k/imgs"
+
   - type: img_loader
     target_height: 384
     target_width: 960
@@ -21,6 +22,18 @@ datasets:
     crop_bottom: 130
     scale: 1.0
     root_dir: "/datasets/BDD100k/bdd100k/images"
+
+  - type: mcap_loader
+    target_height: 384
+    target_width: 960
+    crop_top: 320
+    crop_bottom: 0
+    scale: 1.0
+    root_dir: "/datasets/waymo_e2e_mcap"
+    topics:
+      - "/camera/front/image_compressed"
+      - "/camera/front_left/image_compressed"
+      - "/camera/front_right/image_compressed"
 
 model:
   lr: 1e-4

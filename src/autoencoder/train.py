@@ -3,6 +3,7 @@ from datetime import datetime
 
 import hydra
 import pytorch_lightning as pl
+import torch
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.callback import Callback
@@ -18,6 +19,8 @@ logger = logging.getLogger("autoencoder.train")
 
 @hydra.main(config_path="configs", config_name="train", version_base=None)
 def main(cfg_dict: DictConfig):
+    torch.set_float32_matmul_precision("high")
+
     # Get config and generate name for the run
     cfg = TrainCfg.model_validate(cfg_dict)
     timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -41,7 +44,7 @@ def main(cfg_dict: DictConfig):
     data_module = DataModule(
         cfg.datasets,
         batch_size=cfg.batch_size,
-        num_workers=cfg.batch_size,
+        num_workers=cfg.num_workers,
     )
     model = AutoEncoder(
         lr=cfg.model.lr,
@@ -55,7 +58,7 @@ def main(cfg_dict: DictConfig):
         accelerator=cfg.accelerator,
         devices=cfg.devices,
         callbacks=callbacks,
-        enable_progress_bar=False if cfg.run_profiler else True,
+        enable_progress_bar=False,  # if cfg.run_profiler else True,
         logger=data_logger,
         log_every_n_steps=2000,
     )

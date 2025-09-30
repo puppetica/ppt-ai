@@ -1,13 +1,14 @@
 import os
+import random
 
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import IterableDataset
 from torchvision import io, transforms
 
 from autoencoder.enums import DataSplit
 
 
-class ImgLoader(Dataset):
+class ImgLoader(IterableDataset):
     def __init__(
         self,
         target_height: int,
@@ -19,9 +20,7 @@ class ImgLoader(Dataset):
         data_split: DataSplit,
     ):
         self.data_split = data_split
-        img_root_path = os.path.join(root_dir, "val")
-        if data_split == DataSplit.TRAIN:
-            img_root_path = os.path.join(root_dir, "train")
+        img_root_path = os.path.join(root_dir, "train" if data_split == DataSplit.TRAIN else "val")
         self.files = [
             os.path.join(img_root_path, f)
             for f in os.listdir(img_root_path)
@@ -46,10 +45,15 @@ class ImgLoader(Dataset):
             ]
         )
 
-    def __len__(self):
+    def count_data(self) -> int:
         return len(self.files)
 
-    def __getitem__(self, idx):
-        img = io.read_image(self.files[idx])  # loads as CxHxW tensor in uint8
-        img = self.transform(img)
-        return img
+    def __iter__(self):
+        files = self.files.copy()
+        if self.data_split == DataSplit.TRAIN:
+            random.shuffle(files)
+        files = files[:10]
+        for path in files:
+            img = io.read_image(path)
+            img = self.transform(img)
+            yield img

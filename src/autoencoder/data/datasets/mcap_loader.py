@@ -21,26 +21,14 @@ class McapImgLoader(IterableDataset):
         root_dir: str,
         data_split: DataSplit,
         topics: list[str],
-        buffer_size: int = 1000,
     ):
         self.data_split = data_split
-        self.buffer_size = buffer_size
         self.topics = topics
 
         # pick train or val
         split_dir = "train" if data_split == DataSplit.TRAIN else "val"
         split_path = os.path.join(root_dir, split_dir)
         self.mcap_files = [os.path.join(split_path, f) for f in os.listdir(split_path) if f.lower().endswith(".mcap")]
-        # Count all the channels for __len__()
-        self.num_samples = 0
-        for mcap_file in self.mcap_files:
-            with open(mcap_file, "rb") as f:
-                reader = make_reader(f, decoder_factories=[DecoderFactory()])
-                summary = reader.get_summary()
-                assert summary is not None and summary.statistics is not None
-                for cid, channel in summary.channels.items():
-                    if channel.topic in topics:
-                        self.num_samples += summary.statistics.channel_message_counts.get(cid, 0)
 
         def crop_top_bottom_tensor(tensor: torch.Tensor):
             return tensor[:, crop_top : tensor.shape[1] - crop_bottom, :]
@@ -59,30 +47,57 @@ class McapImgLoader(IterableDataset):
             ]
         )
 
-    def __len__(self):
-        return self.num_samples
-
-    def __iter__(self):
-        buffer = []
-
+    def count_data(self) -> int:
+        num_samples = 0
         for mcap_file in self.mcap_files:
             with open(mcap_file, "rb") as f:
                 reader = make_reader(f, decoder_factories=[DecoderFactory()])
+                summary = reader.get_summary()
+                assert summary is not None and summary.statistics is not None
+                for cid, channel in summary.channels.items():
+                    if channel.topic in self.topics:
+                        self.num_samples += summary.statistics.channel_message_counts.get(cid, 0)
+        return num_samples
+
+    def __iter__(self):
+        mcap_files = self.mcap_files.copy()
+        if self.data_split == DataSplit.TRAIN:
+            random.shuffle(mcap_files)  # shuffle file order once per epoch
+
+        frame_idx = 0
+        for mcap_file in mcap_files:
+            with open(mcap_file, "rb") as f:
+                reader = make_reader(f, decoder_factories=[DecoderFactory()])
                 for schema, channel, message, proto_msg in reader.iter_decoded_messages(topics=self.topics):
+                    if frame_idx % 5 != 0:  # downsample from 10Hz to 2Hz
+                        frame_idx += 1
+                        continue
+
                     img_bytes = proto_msg.data
                     img = io.decode_image(
-                        torch.frombuffer(img_bytes, dtype=torch.uint8),
+                        torch.tensor(bytearray(img_bytes), dtype=torch.uint8),
                         mode=io.ImageReadMode.RGB,
                     )
-
                     img = self.transform(img)
+                    yield img
+                    frame_idx += 1
 
-                    buffer.append(img)
-                    if len(buffer) >= self.buffer_size:
-                        idx = random.randrange(len(buffer)) if self.data_split == DataSplit.TRAIN else 0
-                        yield buffer.pop(idx)
 
-        # Drain remaining buffer
-        while buffer:
-            idx = random.randrange(len(buffer)) if self.data_split == DataSplit.TRAIN else 0
-            yield buffer.pop()
+# Chatgpt code for multi process / worker implementation
+# from torch.utils.data import get_worker_info
+
+# def __iter__(self):
+#     worker_info = get_worker_info()
+#     if worker_info is None:
+#         # single-process data loading
+#         iter_start = 0
+#         iter_end = len(self.data)
+#     else:
+#         # split workload across workers
+#         per_worker = int(math.ceil(len(self.data) / float(worker_info.num_workers)))
+#         worker_id = worker_info.id
+#         iter_start = worker_id * per_worker
+#         iter_end = min(iter_start + per_worker, len(self.data))
+
+#     for idx in range(iter_start, iter_end):
+#         yield self.data[idx]

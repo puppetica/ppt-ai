@@ -2,9 +2,10 @@ import time
 
 import pytorch_lightning as pl
 import torch
-from torch.utils.data import ConcatDataset, DataLoader
+from torch.utils.data import ChainDataset, DataLoader
 
 from autoencoder.data.datasets.img_loader import ImgLoader
+from autoencoder.data.datasets.mcap_loader import McapImgLoader
 from autoencoder.enums import DataSplit
 
 
@@ -28,21 +29,22 @@ class DataModule(pl.LightningDataModule):
             kwargs = cfg.model_dump(exclude={"type"})
             if dataset_type == "img_loader":
                 return ImgLoader(**kwargs, data_split=split)
+            if dataset_type == "mcap_loader":
+                return McapImgLoader(**kwargs, data_split=split)
             else:
                 raise ValueError(f"Unkown dataset type: {dataset_type}")
 
         train_sets = [create_dataset(cfg, DataSplit.TRAIN) for cfg in self.dataset_cfg]
         val_sets = [create_dataset(cfg, DataSplit.VAL) for cfg in self.dataset_cfg]
 
-        self.train_set = ConcatDataset(train_sets)
-        self.val_set = ConcatDataset(val_sets)
+        self.train_set = ChainDataset(train_sets)
+        self.val_set = ChainDataset(val_sets)
 
     def train_dataloader(self):
         return DataLoader(
             self.train_set,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            shuffle=True,
         )
 
     def val_dataloader(self):
