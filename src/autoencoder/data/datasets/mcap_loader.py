@@ -1,15 +1,16 @@
 import os
+import random
 
 import torch
 from mcap.reader import make_reader
 from mcap_protobuf.decoder import DecoderFactory
-from torch.utils.data import Dataset
+from torch.utils.data import IterableDataset
 from torchvision import io, transforms
 
 from autoencoder.enums import DataSplit
 
 
-class McapImgLoader(Dataset):
+class McapImgLoader(IterableDataset):
     def __init__(
         self,
         target_height: int,
@@ -20,26 +21,26 @@ class McapImgLoader(Dataset):
         root_dir: str,
         data_split: DataSplit,
         topics: list[str],
+        buffer_size: int = 1000,
     ):
         self.data_split = data_split
+        self.buffer_size = buffer_size
+        self.topics = topics
 
         # pick train or val
         split_dir = "train" if data_split == DataSplit.TRAIN else "val"
-        self.mcap_files = [
-            os.path.join(root_dir, split_dir, f)
-            for f in os.listdir(os.path.join(root_dir, split_dir))
-            if f.lower().endswith(".mcap")
-        ]
-
-        self.topics = topics
-        self.samples = []  # (mcap_file, topic, log_time, image_bytes)
-
-        # Index images from MCAPs
+        split_path = os.path.join(root_dir, split_dir)
+        self.mcap_files = [os.path.join(split_path, f) for f in os.listdir(split_path) if f.lower().endswith(".mcap")]
+        # Count all the channels for __len__()
+        self.num_samples = 0
         for mcap_file in self.mcap_files:
             with open(mcap_file, "rb") as f:
                 reader = make_reader(f, decoder_factories=[DecoderFactory()])
-                for schema, channel, message, proto_msg in reader.iter_decoded_messages(topics=self.topics):
-                    self.samples.append((mcap_file, channel.topic, message.log_time, proto_msg.data))
+                summary = reader.get_summary()
+                assert summary is not None and summary.statistics is not None
+                for cid, channel in summary.channels.items():
+                    if channel.topic in topics:
+                        self.num_samples += summary.statistics.channel_message_counts.get(cid, 0)
 
         def crop_top_bottom_tensor(tensor: torch.Tensor):
             return tensor[:, crop_top : tensor.shape[1] - crop_bottom, :]
@@ -59,14 +60,29 @@ class McapImgLoader(Dataset):
         )
 
     def __len__(self):
-        return len(self.samples)
+        return self.num_samples
 
-    def __getitem__(self, idx):
-        _, topic, ts, img_bytes = self.samples[idx]
+    def __iter__(self):
+        buffer = []
 
-        img = io.decode_image(torch.frombuffer(img_bytes, dtype=torch.uint8), mode=io.ImageReadMode.RGB)
+        for mcap_file in self.mcap_files:
+            with open(mcap_file, "rb") as f:
+                reader = make_reader(f, decoder_factories=[DecoderFactory()])
+                for schema, channel, message, proto_msg in reader.iter_decoded_messages(topics=self.topics):
+                    img_bytes = proto_msg.data
+                    img = io.decode_image(
+                        torch.frombuffer(img_bytes, dtype=torch.uint8),
+                        mode=io.ImageReadMode.RGB,
+                    )
 
-        # Apply transforms
-        img = self.transform(img)
+                    img = self.transform(img)
 
-        return img
+                    buffer.append(img)
+                    if len(buffer) >= self.buffer_size:
+                        idx = random.randrange(len(buffer)) if self.data_split == DataSplit.TRAIN else 0
+                        yield buffer.pop(idx)
+
+        # Drain remaining buffer
+        while buffer:
+            idx = random.randrange(len(buffer)) if self.data_split == DataSplit.TRAIN else 0
+            yield buffer.pop()

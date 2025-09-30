@@ -1,3 +1,4 @@
+import itertools
 import os
 import shutil
 
@@ -45,15 +46,15 @@ def test_mcap_img_loader(staged_mcap, split):
             "/camera/front_left/image_compressed",
             "/camera/front_right/image_compressed",
         ],
+        buffer_size=5,
     )
 
     # Assert dataset not empty
     assert len(dataset) > 0
 
-    img = dataset[0]
-
-    # Check image tensor properties
-    assert isinstance(img, torch.Tensor)
-    assert img.dtype == torch.float32
-    assert img.ndim == 3
-    assert img.shape[0] == 3  # C,H,W
+    for img in itertools.islice(dataset, 10):
+        # Check image tensor properties
+        assert isinstance(img, torch.Tensor)
+        assert img.dtype == torch.float32
+        assert img.ndim == 3
+        assert img.shape[0] == 3  # C,H,W
