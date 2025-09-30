@@ -19,7 +19,7 @@ class Encoder(nn.Module):
         # ResNet Blocks
         self.res_layers = nn.ModuleList()
 
-        self.res_layers.append(nn.Conv2d(in_ch, res_block_ch[0], 3, padding=1, bias=False))
+        self.res_layers.append(nn.Conv2d(in_ch, res_block_ch[0], 5, stride=2, padding=1, bias=False))
         self.res_layers.append(nn.ReLU(inplace=True))
 
         for i in range(len(res_block_ch) - 1):

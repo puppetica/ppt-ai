@@ -3,10 +3,12 @@ from typing import Any
 from pydantic import BaseModel
 
 
-class ImgDataset(BaseModel):
-    name: str
-    crop_height: int
-    crop_width: int
+class ImgLoaderCfg(BaseModel):
+    type: str
+    target_height: int
+    target_width: int
+    crop_top: int
+    crop_bottom: int
     scale: float
     root_dir: str
 
@@ -27,7 +29,7 @@ class TrainCfg(BaseModel):
     batch_size: int
     num_workers: int
     run_profiler: bool
-    datasets: list[ImgDataset]
+    datasets: list[ImgLoaderCfg]
     model: ModelCfg
 
 

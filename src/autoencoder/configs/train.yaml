@@ -2,25 +2,29 @@ name: autoencoder
 max_epochs: 40
 accelerator: gpu
 devices: 1
-batch_size: 4
+batch_size: 8
 num_workers: 1
 run_profiler: False
 
 datasets:
-  - name: comma10k
-    crop_height: 256
-    crop_width: 960
+  - type: img_loader
+    target_height: 384
+    target_width: 960
+    crop_top: 140
+    crop_bottom: 170
     scale: 1.0
     root_dir: "/datasets/comma10k/imgs"
-  - name: bdd100k
-    crop_height: 256
-    crop_width: 960
+  - type: img_loader
+    target_height: 384
+    target_width: 960
+    crop_top: 150
+    crop_bottom: 130
     scale: 1.0
     root_dir: "/datasets/BDD100k/bdd100k/images"
 
 model:
   lr: 1e-4
   in_ch: 3
-  res_block_ch: [32, 64, 64, 128, 256, 384]
-  num_attn_blocks: 16
+  res_block_ch: [32, 64, 128, 256, 384]
+  num_attn_blocks: 12
   adv_weight: 0.01

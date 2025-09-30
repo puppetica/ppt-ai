@@ -33,7 +33,7 @@ class Decoder(nn.Module):
             self.res_layers.append(stage)
 
         # Final projection to output channels (e.g. 3 for RGB)
-        self.out_conv = nn.Conv2d(res_block_ch[0], out_ch, 3, padding=1)
+        self.out_conv = nn.ConvTranspose2d(res_block_ch[0], out_ch, 4, stride=2, padding=1, output_padding=0)
 
     def _pos_embed(self, x):
         B, C, H, W = x.shape
