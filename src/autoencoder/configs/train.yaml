@@ -1,3 +1,11 @@
+name: autoencoder
+max_epochs: 40
+accelerator: gpu
+devices: 1
+batch_size: 4
+num_workers: 1
+run_profiler: False
+
 datasets:
   - name: comma10k
     crop_height: 256
@@ -16,10 +24,3 @@ model:
   res_block_ch: [32, 64, 64, 128, 256, 384]
   num_attn_blocks: 16
   adv_weight: 0.01
-
-max_epochs: 8
-accelerator: gpu
-devices: 1
-batch_size: 4
-num_workers: 1
-run_profiler: False
