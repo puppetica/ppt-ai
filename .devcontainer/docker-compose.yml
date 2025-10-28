@@ -1,6 +1,8 @@
 services:
   ppt-ai-dev:
-    build: .
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
     container_name: ppt-ai-dev
     tty: true
     stdin_open: true

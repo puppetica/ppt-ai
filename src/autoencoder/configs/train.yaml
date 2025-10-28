@@ -3,8 +3,8 @@ max_epochs: 40
 accelerator: gpu
 devices: 1
 batch_size: 8
-num_workers: 2
-run_profiler: False
+num_workers: 0
+run_profiler: True
 
 datasets:
   - type: img_loader

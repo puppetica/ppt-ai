@@ -1,3 +1,10 @@
+[project]
+name = "ppt-ai"
+version = "0.1.0"
+description = "AI code for puppetica"
+readme = "README.md"
+requires-python = ">=3.10"
+
 [tool.ruff]
 indent-width = 4
 line-length = 120
