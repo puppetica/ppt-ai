@@ -33,6 +33,7 @@ class McapStreamer(IterableDataset):
 
         self.img_processor_factory = ImgProcessorFactory(crop_top, crop_bottom, scale, target_height, target_width)
         self.img_processor = None
+        self.norm_ts_ns = None
         self.img_decoder: dict[str, Any] = {}
         self.buffers: dict[str, FrameBuffer] = {}
 
@@ -88,26 +89,28 @@ class McapStreamer(IterableDataset):
         img_tm1, _ = self.img_processor(img_tm1, K)
         img_ts_sec = torch.tensor([self._ns_to_s_norm(ts_ns), self._ns_to_s_norm(ts_ns_tm1)])
         # IMU data between t and t-1
-        imu_list: list[list[torch.Tensor]] = []
-        imu_list.append([])
+        imu_list: list[torch.Tensor] = []
         for ts_ns, msg in self.buffers["/imu"]:
             if ts_ns < ts_ns_tm1:
                 break
             av = msg.proto_msg.angular_velocity
             accel = msg.proto_msg.linear_acceleration
             ts_sec = self._ns_to_s_norm(ts_ns)
-            imu_list[0].append(torch.tensor([av.x, av.y, av.z, accel.x, accel.y, accel.z, ts_sec]))
+            imu_list.append(torch.tensor([av.x, av.y, av.z, accel.x, accel.y, accel.z, ts_sec]))
+
+        if len(imu_list) == 0:
+            print("HERE")
 
         return Batch(
             seq_name=[seq_name],
             cam_front=CameraBatch(
-                img=img_new,
-                img_tm1=img_tm1,
-                intr=cam_intr,
-                extr=cam_ext,
-                ts_ns=img_ts_sec,
+                img=img_new.unsqueeze(0),
+                img_tm1=img_tm1.unsqueeze(0),
+                intr=cam_intr.unsqueeze(0),
+                extr=cam_ext.unsqueeze(0),
+                ts_sec=img_ts_sec.unsqueeze(0),
             ),
-            imu=imu_list,
+            imu=[imu_list],
             gt_ego_motion=torch.tensor([0.0]),
             gt_ego_motion_valid=torch.tensor([0.0]),
         )
@@ -128,10 +131,13 @@ class McapStreamer(IterableDataset):
             random.shuffle(mcap_files_set)  # shuffle file order once per epoch
 
         for mcap_path in mcap_files_set:
+            # These need to be reset after every sequence
             self.img_processor = None
             self.norm_ts_ns = None
-            got_sync_topic = {t: False for t in self.sync_topics}
             self.img_decoder = {}
+            self.buffers = {}
+            # These need to reset after every data gather
+            got_sync_topic = {t: False for t in self.sync_topics}
             frame_ts_ns: int | None = None
             for ts, msg in merged_messages([mcap_path], self.topics):
                 # Take timestamp of very first frame for normalization (avoid large timestamp numbers)
@@ -155,3 +161,4 @@ class McapStreamer(IterableDataset):
                 if frame_ts_ns is not None and ts > frame_ts_ns:
                     yield self._gen_frame(mcap_path)
                     frame_ts_ns = None
+                    got_sync_topic[msg.topic] = False

@@ -10,11 +10,28 @@ class McapStreamerCfg(BaseModel):
     root_dir: str
 
 
-class ModelCfg(BaseModel):
-    lr: float
+class CamModelCfg(BaseModel):
     in_ch: int
     res_block_ch: list[int]
     num_attn_blocks: int
+
+
+class DepthModelCfg(BaseModel):
+    res_block_ch: list[int]
+    num_attn_blocks: int
+
+
+class ImuModelCfg(BaseModel):
+    token_dim: int
+    num_token: int
+    hidden: int
+
+
+class ModelCfg(BaseModel):
+    lr: float
+    cam: CamModelCfg
+    depth: DepthModelCfg
+    imu: ImuModelCfg
 
 
 class TrainCfg(BaseModel):

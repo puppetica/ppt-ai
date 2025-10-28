@@ -19,7 +19,7 @@ class CameraBatch(TypedDict):
     extr: torch.Tensor
     # timestamps images t, t-1, t-2
     # Shape: [B, 2]
-    ts_ns: torch.Tensor
+    ts_sec: torch.Tensor
 
 
 class Batch(TypedDict):
@@ -33,7 +33,7 @@ class Batch(TypedDict):
     # Sensor Input
     # ----------------------------------
     cam_front: CameraBatch
-    # N-number of IMU readings [a_x, a_y, a_z, accel_x, accel_y, accel_z, ts_ns]
+    # N-number of IMU readings [a_x, a_y, a_z, accel_x, accel_y, accel_z, ts_sec]
     # Shape: [B, N] list of [7,] torch tensors
     imu: list[list[torch.Tensor]]
 

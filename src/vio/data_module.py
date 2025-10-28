@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import ChainDataset, DataLoader
 
 from vio.batch_data import Batch, CameraBatch
-from vio.config.config import McapStreamerCfg
+from vio.configs.config import McapStreamerCfg
 from vio.enums import DataSplit
 from vio.mcap_streamer import McapStreamer
 
@@ -18,13 +18,13 @@ def collate_fn(batch: list[Batch]) -> Batch:
     imgs_tm1 = torch.cat([b["cam_front"]["img_tm1"] for b in batch], dim=0)
     intr = torch.cat([b["cam_front"]["intr"] for b in batch], dim=0)
     extr = torch.cat([b["cam_front"]["extr"] for b in batch], dim=0)
-    ts_ns = torch.cat([b["cam_front"]["ts_ns"] for b in batch], dim=0)
+    ts_sec = torch.cat([b["cam_front"]["ts_sec"] for b in batch], dim=0)
     cam_front = CameraBatch(
-        img=imgs.pin_memory(),
-        img_tm1=imgs_tm1.pin_memory(),
+        img=imgs,
+        img_tm1=imgs_tm1,
         intr=intr,
         extr=extr,
-        ts_ns=ts_ns,
+        ts_sec=ts_sec,
     )
     # imu already correct shape: just flatten the outer list
     imu = [b["imu"][0] for b in batch]
@@ -54,6 +54,16 @@ class DataModule(pl.LightningDataModule):
         torch.cuda.synchronize()
         self.gpu_transfer_start = time.perf_counter()
         return super().on_before_batch_transfer(batch, dataloader_idx)
+
+    def transfer_batch_to_device(self, batch: Batch, device, dataloader_idx):
+        batch = super().transfer_batch_to_device(batch, device, dataloader_idx)
+
+        # move nested IMU lists
+        imu = batch["imu"]
+        for i in range(len(imu)):
+            imu[i] = [x.to(device) for x in imu[i]]
+
+        return batch
 
     def setup(self, stage=None):
         train_sets = [McapStreamer(**cfg.model_dump(), data_split=DataSplit.TRAIN) for cfg in self.dataset_cfg]

@@ -19,6 +19,14 @@
             "program": "${workspaceFolder}/src/autoencoder/predict.py",
             "console": "integratedTerminal",
             "args": []
-        }
+        },
+        {
+            "name": "VIO: Train",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/vio/train.py",
+            "console": "integratedTerminal",
+            "args": []
+        },
     ]
 }

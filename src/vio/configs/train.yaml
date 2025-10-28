@@ -3,8 +3,8 @@ max_epochs: 40
 accelerator: gpu
 devices: 1
 batch_size: 8
-num_workers: 0
-run_profiler: True
+num_workers: 4
+run_profiler: False
 
 datasets:
   - target_height: 448
@@ -22,7 +22,14 @@ datasets:
 
 model:
   lr: 1e-4
-  in_ch: 3
-  res_block_ch: [32, 64, 128, 256, 384]
-  num_attn_blocks: 12
-  adv_weight: 0.01
+  cam:
+    in_ch: 3
+    res_block_ch: [64, 64, 128, 256, 384]
+    num_attn_blocks: 12
+  depth:
+    res_block_ch: [64, 64, 128, 256, 384]
+    num_attn_blocks: 6
+  imu:
+    num_token: 5
+    token_dim: 256
+    hidden: 256

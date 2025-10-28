@@ -10,7 +10,7 @@ from pytorch_lightning.callbacks.callback import Callback
 
 from common.callbacks.profiler import ProfilerCallback
 from common.logging.data_logger import DataLogger
-from vio.config.config import TrainCfg
+from vio.configs.config import TrainCfg
 from vio.data_module import DataModule
 from vio.module import VioModule
 
@@ -46,12 +46,7 @@ def main(cfg_dict: DictConfig):
         batch_size=cfg.batch_size,
         num_workers=cfg.num_workers,
     )
-    model = VioModule(
-        lr=cfg.model.lr,
-        in_ch=cfg.model.in_ch,
-        res_block_ch=cfg.model.res_block_ch,
-        num_attn_blocks=cfg.model.num_attn_blocks,
-    )
+    model = VioModule(data_logger=data_logger, cfg=cfg.model)
     # model = VioModule.load_from_checkpoint(".logger/bbd_comma_epoch_7.ckpt")
     trainer = pl.Trainer(
         max_epochs=cfg.max_epochs,
@@ -61,6 +56,8 @@ def main(cfg_dict: DictConfig):
         enable_progress_bar=False if cfg.run_profiler else True,
         logger=data_logger,
         log_every_n_steps=5000,
+        # limit_val_batches=30,
+        # limit_train_batches=5,
     )
     trainer.fit(model, datamodule=data_module)
 
