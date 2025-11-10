@@ -44,3 +44,18 @@ class TrainCfg(BaseModel):
     run_profiler: bool
     datasets: list[McapStreamerCfg]
     model: ModelCfg
+    limit_train_batches: int = -1  # -1: Run all batches
+    limit_val_batches: int = -1  # -1: Run all batches
+
+
+class PredictCfg(BaseModel):
+    name: str
+    path: str
+    checkpoint: str
+    train_cfg: str
+
+    accelerator: str
+    devices: int
+    batch_size: int
+    num_workers: int
+    limit_batches: int = -1  # -1: Run all batches

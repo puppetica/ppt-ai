@@ -11,7 +11,7 @@ from pytorch_lightning.callbacks.callback import Callback
 from common.callbacks.profiler import ProfilerCallback
 from common.logging.data_logger import DataLogger
 from vio.configs.config import TrainCfg
-from vio.data_module import DataModule
+from vio.data.data_module import DataModule
 from vio.module import VioModule
 
 logger = logging.getLogger("vio.train")
@@ -56,8 +56,8 @@ def main(cfg_dict: DictConfig):
         enable_progress_bar=False if cfg.run_profiler else True,
         logger=data_logger,
         log_every_n_steps=5000,
-        # limit_val_batches=30,
-        # limit_train_batches=5,
+        limit_val_batches=cfg.limit_val_batches if cfg.limit_val_batches != -1 else None,
+        limit_train_batches=cfg.limit_train_batches if cfg.limit_train_batches != -1 else None,
     )
     trainer.fit(model, datamodule=data_module)
 

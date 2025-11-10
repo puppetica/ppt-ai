@@ -17,7 +17,7 @@ class CameraBatch(TypedDict):
     # sensor -> ego [x, y, z, q_x, q_y, q_z, q_w]
     # Shape: [B, 7]
     extr: torch.Tensor
-    # timestamps images t, t-1, t-2
+    # timestamps images t, t-1
     # Shape: [B, 2]
     ts_sec: torch.Tensor
 
@@ -36,6 +36,8 @@ class Batch(TypedDict):
     # N-number of IMU readings [a_x, a_y, a_z, accel_x, accel_y, accel_z, ts_sec]
     # Shape: [B, N] list of [7,] torch tensors
     imu: list[list[torch.Tensor]]
+
+    imu_dt: torch.Tensor
 
     # ----------------------------------
     # Ground Truth / Labels

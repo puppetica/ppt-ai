@@ -6,7 +6,7 @@ ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64
 ENV PATH=/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ENV PYTORCH_VERSION=2.8.0
-ENV PYTHONPATH=/workspace/src
+ENV PYTHONPATH="/workspace/src:${PYTHONPATH}"
 
 # -------------------------------------------------------------
 # System setup
@@ -31,7 +31,7 @@ ENV PATH="/usr/local/bin:$PATH"
 # Install Python dependencies
 # -------------------------------------------------------------
 # Install PyTorch from the correct index (prebuilt CUDA 12.9 wheels)
-RUN pip install "torch~=2.8" "torchvision~=0.23" --index-url https://download.pytorch.org/whl/cu129
+RUN pip install "torch==2.8.*" "torchvision==0.23.*" --index-url https://download.pytorch.org/whl/cu129
 # Install remaining dependencies
 RUN pip install \
     "pytorch-lightning~=2.5" \
@@ -52,7 +52,7 @@ RUN pip install \
     "tqdm" \
     "numba" \
     "matplotlib" \
-    "ipython" \
+    "ipython"
 
 # -------------------------------------------------------------
 # Copy the source code

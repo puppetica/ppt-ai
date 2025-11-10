@@ -9,7 +9,7 @@ Anything that is trained with pytorch
 - Workstation with Nvidia GPU
 
 ## Get into the Container
-In VS Code press ctrl+shift+P and search for "Dev Containers: Rebuild and Reopen in Container". The first time this will take a bit as Docker as to pull the Image. Once its ready you will be in the container and you will see only the workspace folder. Switch back with ctrl+shift+P and "Dev Containers: Reopen folder localy".
+In VS Code press ctrl+shift+P and search for "Dev Containers: Rebuild and Reopen in Container". The first time this will take a bit as Docker as to pull the Image. Switch back with ctrl+shift+P and "Dev Containers: Reopen folder localy".
 
 ## Run and Debug Code
 

@@ -1,16 +1,15 @@
 from typing import cast
 
 import pytest
-import torch
 from omegaconf import OmegaConf
 
-from vio.config.config import TrainCfg
-from vio.data_module import DataModule
+from vio.configs.config import TrainCfg
+from vio.data.data_module import DataModule
 
 
 @pytest.fixture(scope="module")
 def train_cfg():
-    cfg_path = "src/vio/config/train.yaml"
+    cfg_path = "src/vio/configs/train.yaml"
     cfg = OmegaConf.load(cfg_path)
     cfg_dict = cast(dict, OmegaConf.to_container(cfg, resolve=True))
     return TrainCfg(**cfg_dict)  # type: ignore[arg-type]

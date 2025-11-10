@@ -4,41 +4,16 @@ import pytorch_lightning as pl
 import torch
 from torch.utils.data import ChainDataset, DataLoader
 
-from vio.batch_data import Batch, CameraBatch
 from vio.configs.config import McapStreamerCfg
+from vio.data.batch_data import Batch
+from vio.data.mcap_dataset import McapDataset
 from vio.enums import DataSplit
-from vio.mcap_streamer import McapStreamer
 
 
-def collate_fn(batch: list[Batch]) -> Batch:
-    seq_name = [b["seq_name"][0] for b in batch]
-
-    # These already have batch dim=1, so cat instead of stack
-    imgs = torch.cat([b["cam_front"]["img"] for b in batch], dim=0)
-    imgs_tm1 = torch.cat([b["cam_front"]["img_tm1"] for b in batch], dim=0)
-    intr = torch.cat([b["cam_front"]["intr"] for b in batch], dim=0)
-    extr = torch.cat([b["cam_front"]["extr"] for b in batch], dim=0)
-    ts_sec = torch.cat([b["cam_front"]["ts_sec"] for b in batch], dim=0)
-    cam_front = CameraBatch(
-        img=imgs,
-        img_tm1=imgs_tm1,
-        intr=intr,
-        extr=extr,
-        ts_sec=ts_sec,
-    )
-    # imu already correct shape: just flatten the outer list
-    imu = [b["imu"][0] for b in batch]
-
-    gt_ego_motion = torch.cat([b["gt_ego_motion"] for b in batch], dim=0)
-    gt_ego_motion_valid = torch.cat([b["gt_ego_motion_valid"] for b in batch], dim=0)
-
-    return Batch(
-        seq_name=seq_name,
-        cam_front=cam_front,
-        imu=imu,
-        gt_ego_motion=gt_ego_motion,
-        gt_ego_motion_valid=gt_ego_motion_valid,
-    )
+def collate_fn(batch) -> Batch:
+    # NOTE: Collate happens already in the streamers to ensure max 1 sequence per batch
+    # TODO: Do pin memory here?
+    return batch
 
 
 class DataModule(pl.LightningDataModule):
@@ -48,7 +23,7 @@ class DataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
 
-        self.gpu_transfer_start = time.time()  # For profiler
+        self.gpu_transfer_start = time.time()  # for profiler
 
     def on_before_batch_transfer(self, batch, dataloader_idx=0):
         torch.cuda.synchronize()
@@ -66,8 +41,14 @@ class DataModule(pl.LightningDataModule):
         return batch
 
     def setup(self, stage=None):
-        train_sets = [McapStreamer(**cfg.model_dump(), data_split=DataSplit.TRAIN) for cfg in self.dataset_cfg]
-        val_sets = [McapStreamer(**cfg.model_dump(), data_split=DataSplit.VAL) for cfg in self.dataset_cfg]
+        train_sets = [
+            McapDataset(**cfg.model_dump(), data_split=DataSplit.TRAIN, max_batch_size=self.batch_size)
+            for cfg in self.dataset_cfg
+        ]
+        val_sets = [
+            McapDataset(**cfg.model_dump(), data_split=DataSplit.VAL, max_batch_size=self.batch_size)
+            for cfg in self.dataset_cfg
+        ]
 
         self.train_set = ChainDataset(train_sets)
         self.val_set = ChainDataset(val_sets)
@@ -75,26 +56,30 @@ class DataModule(pl.LightningDataModule):
     def train_dataloader(self):
         return DataLoader(
             self.train_set,
-            batch_size=self.batch_size,
+            batch_size=None,
             num_workers=self.num_workers,
             persistent_workers=self.num_workers > 0,
+            prefetch_factor=1 if self.num_workers > 0 else None,
             collate_fn=collate_fn,
         )
 
     def val_dataloader(self):
         return DataLoader(
             self.val_set,
-            batch_size=self.batch_size,
+            batch_size=None,
             num_workers=self.num_workers,
             persistent_workers=self.num_workers > 0,
+            prefetch_factor=1 if self.num_workers > 0 else None,
             collate_fn=collate_fn,
         )
 
     def predict_dataloader(self):
+        # Reuse the val set as long as we are starved for data
         return DataLoader(
             self.val_set,
-            batch_size=self.batch_size,
+            batch_size=None,
             num_workers=self.num_workers,
             persistent_workers=self.num_workers > 0,
+            prefetch_factor=1 if self.num_workers > 0 else None,
             collate_fn=collate_fn,
         )

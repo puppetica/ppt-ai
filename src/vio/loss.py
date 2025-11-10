@@ -143,17 +143,11 @@ def _edge_aware_smoothness(depth: torch.Tensor, img_t: torch.Tensor):
 
 
 def photometric_loss(batch, pred_depth, pred_pose):
-    """
-    batch: Batch
-    pred_depth: [B,1,Hd,Wd] (for frame t)
-    pred_pose:  [B,7] (ego t-1->t) in IMU/ego coords
-    Returns:
-      photo_loss, smooth_loss, recon_best
-    """
     img_t = batch["cam_front"]["img"]  # [B,3,H,W]
     img_tm1 = batch["cam_front"]["img_tm1"]  # [B,3,H,W]
     intr = batch["cam_front"]["intr"]  # [B,4]
     extr = batch["cam_front"]["extr"]  # [B,7]
+    imu_dt = batch["imu_dt"]  # [B]  # <<< ADDED: integrated metric translation (meters)
 
     B, _, H, W = img_t.shape
 
@@ -162,56 +156,55 @@ def photometric_loss(batch, pred_depth, pred_pose):
     else:
         depth_t = pred_depth
 
-    # K, K^-1
     K = _make_K(intr)
     Kinv = torch.inverse(K)
 
-    # Static camera pose in ego coords
-    T_ce = _se3_from_tq(extr[:, :3], extr[:, 3:7])  # [B,4,4]
-    T_ec = _invert_se3(T_ce)  # [B,4,4]
+    T_ce = _se3_from_tq(extr[:, :3], extr[:, 3:7])
+    T_ec = _invert_se3(T_ce)
 
-    # Predicted ego motion
-    T_ego_tm1_to_t = _se3_from_tq(pred_pose[:, :3], pred_pose[:, 3:7])  # [B,4,4]
-    T_ego_t_to_tm1 = _invert_se3(T_ego_tm1_to_t)
+    T_ego_tm1_to_t = _se3_from_tq(pred_pose[:, :3], pred_pose[:, 3:7])
+    T_cam_tm1_to_t = T_ec @ T_ego_tm1_to_t @ T_ce
 
-    # Camera transforms
-    T_cam_t_to_cam_tm1 = T_ec @ T_ego_t_to_tm1 @ T_ce  # [B,4,4]
-    T_cam_tm1_to_cam_t = T_ec @ T_ego_tm1_to_t @ T_ce  # [B,4,4]
+    X_cam_t = _backproject(depth_t, Kinv)
+    X_cam_tm1 = _transform_points(T_cam_tm1_to_t, X_cam_t)
+    grid, valid = _project(K, X_cam_tm1, H, W)
 
-    # Backproject depth(t)
-    X_cam_t = _backproject(depth_t, Kinv)  # [B,3,H,W]
+    # <<< ADDED: in-bounds mask
+    gx, gy = grid[..., 0], grid[..., 1]
+    inb = (gx > -1) & (gx < 1) & (gy > -1) & (gy < 1)
+    mask = (valid & inb).float().unsqueeze(1)
 
-    # 1) Warp: (t-1) → t   using depth(t)
-    X_cam_tm1_1 = _transform_points(T_cam_t_to_cam_tm1, X_cam_t)
-    grid1, valid1 = _project(K, X_cam_tm1_1, H, W)
-    recon1 = F.grid_sample(img_tm1, grid1, mode="bilinear", padding_mode="zeros", align_corners=False)
-    mask1 = valid1.float().unsqueeze(1)
+    recon = F.grid_sample(img_tm1, grid, mode="bilinear", padding_mode="border", align_corners=False)
 
-    # 2) Warp: t → (t-1)   using same depth(t)
-    X_cam_tm1 = _transform_points(T_cam_tm1_to_cam_t, X_cam_t)
-    grid2, valid2 = _project(K, X_cam_tm1, H, W)
-    recon2 = F.grid_sample(img_t, grid2, mode="bilinear", padding_mode="zeros", align_corners=False)
-    mask2 = valid2.float().unsqueeze(1)
-
-    # Photometric errors (SSIM+L1)
     def photo_err(src, tgt):
         ssim = _ssim(src, tgt)
         l1 = torch.abs(src - tgt).mean(dim=1, keepdim=True)
         return 0.85 * ssim.mean(dim=1, keepdim=True) + 0.15 * l1
 
-    err1 = photo_err(img_t, recon1)  # t ← (t-1)
-    err2 = photo_err(img_tm1, recon2)  # (t-1) ← t
+    err = photo_err(img_t, recon)  # t ← (t-1)
 
-    # Min reprojection masking
-    err = torch.minimum(err1, err2)
-    mask = torch.maximum(mask1, mask2)
+    # <<< ADDED: identity auto-masking
+    err_id = photo_err(img_t, img_tm1)
+    keep = (err < err_id).float()
+    mask = mask * keep
 
     photo_loss = (err * mask).sum() / (mask.sum() + 1e-6)
 
-    # Smoothness regularizer
-    smooth_loss = _edge_aware_smoothness(depth_t, img_t)
+    # <<< ADDED: inverse-depth smoothness (scale-normalized)
+    inv = 1.0 / (depth_t + 1e-6)
+    inv = inv / (inv.mean(dim=[2, 3], keepdim=True) + 1e-6)
+    dx = torch.abs(inv[:, :, :, 1:] - inv[:, :, :, :-1])
+    dy = torch.abs(inv[:, :, 1:, :] - inv[:, :, :-1, :])
+    dx_img = torch.mean(torch.abs(img_t[:, :, :, 1:] - img_t[:, :, :, :-1]), dim=1, keepdim=True)
+    dy_img = torch.mean(torch.abs(img_t[:, :, 1:, :] - img_t[:, :, :-1, :]), dim=1, keepdim=True)
+    wx = torch.exp(-dx_img)
+    wy = torch.exp(-dy_img)
+    smooth_loss = (dx * wx).mean() + (dy * wy).mean()
 
-    # For previews: select the direction with lower error
-    recon_best = torch.where((err1 < err2), recon1, recon2)
+    # <<< ADDED: IMU scale alignment
+    trans_norm_pred = pred_pose[:, :3].norm(dim=1)
+    s_pred = trans_norm_pred.mean()
+    s_imu = imu_dt.mean()
+    scale_loss = F.l1_loss(s_pred, s_imu)
 
-    return photo_loss, smooth_loss, recon_best
+    return photo_loss, smooth_loss, scale_loss, recon

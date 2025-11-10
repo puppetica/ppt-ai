@@ -39,7 +39,7 @@ class PoseEstimator(nn.Module):
             batch_first=True,
             norm_first=True,
         )
-        self.encoder = nn.TransformerEncoder(enc_layer, num_layers=depth)
+        self.encoder = nn.TransformerEncoder(enc_layer, num_layers=depth, enable_nested_tensor=False)
 
         # pose head from CLS token
         self.head = nn.Sequential(

@@ -28,5 +28,13 @@
             "console": "integratedTerminal",
             "args": []
         },
+        {
+            "name": "VIO: Predict",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/vio/predict.py",
+            "console": "integratedTerminal",
+            "args": []
+        },
     ]
 }
