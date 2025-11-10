@@ -55,7 +55,7 @@ class PoseEstimator(nn.Module):
         imu_tokens: torch.Tensor,  # [B, K, token_dim] from ImuEncoder
         intr: torch.Tensor,  # [B, 4]  (fx, fy, cx, cy)
         extr: torch.Tensor,  # [B, 7]  (x,y,z,qx,qy,qz,qw) sensor→ego
-        delta_t: torch.Tensor,  # [B]     seconds between t-1 and t
+        delta_t: torch.Tensor,  # [B, 1]     seconds between t-1 and t
     ) -> torch.Tensor:
         B = cam_feat.size(0)
 
@@ -71,7 +71,7 @@ class PoseEstimator(nn.Module):
         cls_tok = cls_tok + self.cls_type
 
         # calibration embedding added to CAM and CLS (conditions pose on rig + timing)
-        calib = torch.cat([intr, extr, delta_t.unsqueeze(-1)], dim=1)  # [B,12]
+        calib = torch.cat([intr, extr, delta_t], dim=1)  # [B,12]
         calib_emb = self.calib_proj(calib).unsqueeze(1)  # [B,1,D]
 
         cam_tok = cam_tok + self.cam_type + calib_emb

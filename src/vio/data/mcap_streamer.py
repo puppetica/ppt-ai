@@ -25,7 +25,6 @@ class McapStreamer(Iterable[Batch]):
         self.seq_name = os.path.splitext(os.path.basename(self.mcap_path))[0]
         self.img_processor_factory = ImgProcessorFactory(crop_top, crop_bottom, scale, target_height, target_width)
         self.img_processor = None
-        self.norm_ts_ns = None
         self.img_decoder: dict[str, Any] = {}
         self.buffers: dict[str, FrameBuffer] = {}
 
@@ -54,13 +53,6 @@ class McapStreamer(Iterable[Batch]):
         img = torch.from_numpy(img).permute(2, 0, 1).contiguous()  # CxHxW
         return img
 
-    def _ns_to_s_norm(self, ts_ns: int):
-        if self.norm_ts_ns is None:
-            raise ValueError("Timestamp of first frame not set!")
-        normalized_ts_ns = ts_ns - self.norm_ts_ns
-        normalized_ts_s = normalized_ts_ns / 1e9
-        return normalized_ts_s
-
     def _gen_frame(self) -> Batch:
         # Front img t
         ts_ns, msg = self.buffers["/cam/front0/image"].get(0)
@@ -79,16 +71,16 @@ class McapStreamer(Iterable[Batch]):
         ts_ns_tm1, msg_tm1 = self.buffers["/cam/front0/image"].get(1)
         img_tm1 = self._decode_img(msg_tm1)
         img_tm1, _ = self.img_processor(img_tm1, K)
-        img_ts_sec = torch.tensor([self._ns_to_s_norm(ts_ns), self._ns_to_s_norm(ts_ns_tm1)])
+        img_timediff_s = torch.tensor([(ts_ns - ts_ns_tm1) / 1e9])
         # IMU data between t and t-1
         imu_list: list[torch.Tensor] = []
-        for ts_ns, msg in self.buffers["/imu"]:
+        for imug_ts_ns, msg in self.buffers["/imu"]:
             if ts_ns < ts_ns_tm1:
                 break
             av = msg.proto_msg.angular_velocity
             accel = msg.proto_msg.linear_acceleration
-            ts_sec = self._ns_to_s_norm(ts_ns)
-            imu_list.append(torch.tensor([av.x, av.y, av.z, accel.x, accel.y, accel.z, ts_sec]))
+            imu_timediff_s = (ts_ns - imug_ts_ns) / 1e9
+            imu_list.append(torch.tensor([av.x, av.y, av.z, accel.x, accel.y, accel.z, imu_timediff_s]))
 
         pos = torch.zeros(3)
         vel = torch.zeros(3)
@@ -105,12 +97,14 @@ class McapStreamer(Iterable[Batch]):
 
         return Batch(
             seq_name=[self.seq_name],
+            input_mcap_path=[self.mcap_path],
+            ts_ns=[ts_ns],
             cam_front=CameraBatch(
                 img=img_new.unsqueeze(0),
                 img_tm1=img_tm1.unsqueeze(0),
                 intr=cam_intr.unsqueeze(0),
                 extr=cam_ext.unsqueeze(0),
-                ts_sec=img_ts_sec.unsqueeze(0),
+                timediff_s=img_timediff_s.unsqueeze(0),
             ),
             imu=[imu_list],
             imu_dt=imu_dt.unsqueeze(0),
@@ -122,9 +116,6 @@ class McapStreamer(Iterable[Batch]):
         got_sync_topic = {t: False for t in self.sync_topics}
         frame_ts_ns: int | None = None
         for ts, msg in merged_messages([self.mcap_path], self.topics):
-            # Take timestamp of very first frame for normalization (avoid large timestamp numbers)
-            if self.norm_ts_ns is None:
-                self.norm_ts_ns = ts
             # Save msg to buffer
             if msg.topic not in self.buffers:
                 self.buffers[msg.topic] = FrameBuffer(msg.topic)

@@ -17,9 +17,9 @@ class CameraBatch(TypedDict):
     # sensor -> ego [x, y, z, q_x, q_y, q_z, q_w]
     # Shape: [B, 7]
     extr: torch.Tensor
-    # timestamps images t, t-1
+    # timediff to t-1 in seconds
     # Shape: [B, 2]
-    ts_sec: torch.Tensor
+    timediff_s: torch.Tensor
 
 
 class Batch(TypedDict):
@@ -28,12 +28,16 @@ class Batch(TypedDict):
     # ----------------------------------
     # Name of sequence for each batch element
     seq_name: list[str]
+    # Path to the mcap data used for model input
+    input_mcap_path: list[str]
+    # Master timestamp in ns
+    ts_ns: list[int]
 
     # ----------------------------------
     # Sensor Input
     # ----------------------------------
     cam_front: CameraBatch
-    # N-number of IMU readings [a_x, a_y, a_z, accel_x, accel_y, accel_z, ts_sec]
+    # N-number of IMU readings [a_x, a_y, a_z, accel_x, accel_y, accel_z, timediff_s (to master ts_ns)]
     # Shape: [B, N] list of [7,] torch tensors
     imu: list[list[torch.Tensor]]
 

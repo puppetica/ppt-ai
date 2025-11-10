@@ -1,3 +1,4 @@
+import os
 from collections import OrderedDict
 from queue import Queue
 from threading import Thread
@@ -30,8 +31,10 @@ class VioModule(pl.LightningModule):
         self.depth_decoder = DepthDecoder(cfg.depth.res_block_ch, cfg.depth.num_attn_blocks)
         self.imu_encoder = ImuEncoder(cfg.imu.token_dim, cfg.imu.hidden, cfg.imu.num_token)
         self.pose_estimator = PoseEstimator(cam_in_dim=cfg.cam.res_block_ch[-1], token_dim=cfg.imu.token_dim)
-        # For post processing on predict, [timestamps, sequences, dict of data outputs]
-        self.pred_queue: Queue[tuple[np.ndarray, list[str], dict[str, np.ndarray]] | None] = Queue(maxsize=1024)
+        # For post processing on predict, [timestamps, sequences, input_mcap_paths, dict of data outputs]
+        self.pred_queue: Queue[tuple[list[int], list[str], list[str], dict[str, np.ndarray]] | None] = Queue(
+            maxsize=1024
+        )
         self.post_proc_thread = Thread(target=self.post_proc, daemon=True)
         self.post_proc_thread.start()
 
@@ -47,8 +50,7 @@ class VioModule(pl.LightningModule):
 
         intr = batch["cam_front"]["intr"]  # [B,4]
         extr = batch["cam_front"]["extr"]  # [B,7]
-        ts = batch["cam_front"]["ts_sec"]  # [B,2]
-        delta_t = ts[:, 0] - ts[:, 1]  # [B]
+        delta_t = batch["cam_front"]["timediff_s"]  # [B,1]
 
         pose = self.pose_estimator(
             cam_feat,
@@ -105,25 +107,33 @@ class VioModule(pl.LightningModule):
             item = self.pred_queue.get()
             if item is None:
                 break
-            ts_ns, seq_name, data = item
+            ts_ns, seq_name, input_mcap_path, data = item
             for i in range(len(seq_name)):
                 if seq_name[i] not in mcap_writer_dict:
                     # As we can not keep all mcap data in memory the assumption is
-                    # after 70 mcaps are written in the queue, we can start finishing the oldest ones
+                    # after 70 mcaps are written in the queue, we can start finishing
+                    # the ones that got no more updates for the longest time
                     if len(mcap_writer_dict) > 70:
                         _, w = mcap_writer_dict.popitem(last=False)
                         w.finish()
+                    link_path = os.path.join(self.data_logger.save_dir, seq_name[i])
+                    os.makedirs(link_path, exist_ok=True)
                     mcap_writer_dict[seq_name[i]] = Writer(
-                        f"{self.data_logger.save_dir}/{seq_name[i]}.mcap", compression=CompressionType.LZ4
+                        os.path.join(link_path, "output.mcap"), compression=CompressionType.LZ4
                     )
+                    # Symlink original data input mcap to same loc"ation
+                    link = os.path.join(link_path, "input.mcap")
+                    if os.path.islink(link) or os.path.exists(link):
+                        os.unlink(link)
+                    os.symlink(input_mcap_path[i], link)
                 mcap_writer_dict.move_to_end(seq_name[i])
-
+                # Visualize depth image
                 depth = data["/pred/depth"][i]
-                msg = vis_depth_img(ts_ns[i][0], depth)
+                msg = vis_depth_img(ts_ns[i], depth)
                 mcap_writer_dict[seq_name[i]].write_message(
                     topic="/pred/depth",
-                    log_time=ts_ns[i][0],
-                    publish_time=ts_ns[i][0],
+                    log_time=ts_ns[i],
+                    publish_time=ts_ns[i],
                     message=msg,
                 )
         for _, w in mcap_writer_dict.items():
@@ -132,11 +142,13 @@ class VioModule(pl.LightningModule):
     def predict_step(self, batch: Batch, batch_idx):
         preds = self.forward(batch)
         seq_name = batch["seq_name"]
-        ts_ns = (batch["cam_front"]["ts_sec"].cpu().numpy() * 1e9).astype(np.int64)
+        input_mcap_path = batch["input_mcap_path"]
+        ts_ns = batch["ts_ns"]
         self.pred_queue.put(
             (
                 ts_ns,
                 seq_name,
+                input_mcap_path,
                 {
                     "/pred/pose": preds["pose"].cpu().numpy(),
                     "/pred/depth": preds["depth"].cpu().numpy(),

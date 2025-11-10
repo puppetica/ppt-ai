@@ -12,19 +12,21 @@ from vio.enums import DataSplit
 
 def collate_batch_list(batch: list[Batch]) -> Batch:
     seq_name = [b["seq_name"][0] for b in batch]
+    input_mcap_path = [b["input_mcap_path"][0] for b in batch]
+    ts_ns = [b["ts_ns"][0] for b in batch]
 
     # These already have batch dim=1, so cat instead of stack
     imgs = torch.cat([b["cam_front"]["img"] for b in batch], dim=0)
     imgs_tm1 = torch.cat([b["cam_front"]["img_tm1"] for b in batch], dim=0)
     intr = torch.cat([b["cam_front"]["intr"] for b in batch], dim=0)
     extr = torch.cat([b["cam_front"]["extr"] for b in batch], dim=0)
-    ts_sec = torch.cat([b["cam_front"]["ts_sec"] for b in batch], dim=0)
+    timediff_s = torch.cat([b["cam_front"]["timediff_s"] for b in batch], dim=0)
     cam_front = CameraBatch(
         img=imgs,
         img_tm1=imgs_tm1,
         intr=intr,
         extr=extr,
-        ts_sec=ts_sec,
+        timediff_s=timediff_s,
     )
     # imu already correct shape: just flatten the outer list
     imu = [b["imu"][0] for b in batch]
@@ -35,6 +37,8 @@ def collate_batch_list(batch: list[Batch]) -> Batch:
 
     return Batch(
         seq_name=seq_name,
+        input_mcap_path=input_mcap_path,
+        ts_ns=ts_ns,
         cam_front=cam_front,
         imu=imu,
         imu_dt=imu_dt,

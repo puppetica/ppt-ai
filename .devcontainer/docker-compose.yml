@@ -17,7 +17,7 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - ./workspace:/workspace
-      - ~/datasets:/datasets
+      - /datasets:/datasets
     working_dir: /workspace
     network_mode: host
     ipc: host

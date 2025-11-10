@@ -17,4 +17,5 @@
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
+    "cmake.ignoreCMakeListsMissing": true,
 }
