@@ -134,4 +134,4 @@ class McapStreamer(Iterable[Batch]):
             if frame_ts_ns is not None and ts > frame_ts_ns:
                 yield self._gen_frame()
                 frame_ts_ns = None
-                got_sync_topic[msg.topic] = False
+                got_sync_topic = {t: False for t in self.sync_topics}

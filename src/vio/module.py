@@ -11,6 +11,7 @@ from mcap.writer import CompressionType
 from mcap_protobuf.writer import Writer
 
 from common.logging.data_logger import DataLogger
+from interface.python.foxglove.FrameTransform_pb2 import FrameTransform
 from vio.configs.config import ModelCfg
 from vio.data.batch_data import Batch
 from vio.loss import photometric_loss
@@ -18,7 +19,7 @@ from vio.model.cam_encoder import CamEncoder
 from vio.model.depth_decoder import DepthDecoder
 from vio.model.imu_encoder import ImuEncoder
 from vio.model.pose_estimator import PoseEstimator
-from vio.visu import vis_depth_img
+from vio.visu import vis_depth_img, vis_rel_transform
 
 
 class VioModule(pl.LightningModule):
@@ -103,6 +104,7 @@ class VioModule(pl.LightningModule):
 
     def post_proc(self):
         mcap_writer_dict: OrderedDict[str, Writer] = OrderedDict()
+        last_world_pos: dict[str, FrameTransform | None] = {}
         while True:
             item = self.pred_queue.get()
             if item is None:
@@ -126,6 +128,8 @@ class VioModule(pl.LightningModule):
                     if os.path.islink(link) or os.path.exists(link):
                         os.unlink(link)
                     os.symlink(input_mcap_path[i], link)
+                    # Make starting point at (0, 0)
+                    last_world_pos[seq_name[i]] = None
                 mcap_writer_dict.move_to_end(seq_name[i])
                 # Visualize depth image
                 depth = data["/pred/depth"][i]
@@ -136,6 +140,16 @@ class VioModule(pl.LightningModule):
                     publish_time=ts_ns[i],
                     message=msg,
                 )
+                # Visualize predicted pose
+                rel_pose = data["/pred/pose"][i]
+                last_world_pos[seq_name[i]] = vis_rel_transform(ts_ns[i], rel_pose, last_world_pos[seq_name[i]])
+                mcap_writer_dict[seq_name[i]].write_message(
+                    topic="/pred/pose",
+                    log_time=ts_ns[i],
+                    publish_time=ts_ns[i],
+                    message=last_world_pos[seq_name[i]],
+                )
+
         for _, w in mcap_writer_dict.items():
             w.finish()
 
