@@ -12,9 +12,10 @@ from mcap_protobuf.writer import Writer
 
 from common.logging.data_logger import DataLogger
 from interface.python.foxglove.FrameTransform_pb2 import FrameTransform
+from interface.python.foxglove.Point2_pb2 import Point2
 from vio.configs.config import ModelCfg
 from vio.data.batch_data import Batch
-from vio.loss import photometric_loss
+from vio.loss import vio_loss
 from vio.model.cam_encoder import CamEncoder
 from vio.model.depth_decoder import DepthDecoder
 from vio.model.imu_encoder import ImuEncoder
@@ -65,10 +66,16 @@ class VioModule(pl.LightningModule):
 
     def training_step(self, batch: Batch, batch_idx):
         out = self.forward(batch)
-        photo_loss, smooth_loss, scale_loss, _ = photometric_loss(batch, out["depth"], out["pose"])
-        loss = photo_loss + 0.1 * smooth_loss + 0.1 * scale_loss
+        photo_loss, smooth_loss, pose_loss, scale_loss, _ = vio_loss(batch, out["depth"], out["pose"])
+        loss = photo_loss + smooth_loss
         self.log_dict(
-            {"train_photo": photo_loss, "train_smooth": smooth_loss, "scale_loss": scale_loss, "train_loss": loss},
+            {
+                "train_photo": photo_loss,
+                "train_smooth": smooth_loss,
+                "pose_loss": pose_loss,
+                "scale_loss": scale_loss,
+                "train_loss": loss,
+            },
             prog_bar=True,
             on_step=True,
             on_epoch=True,
@@ -78,10 +85,16 @@ class VioModule(pl.LightningModule):
     def validation_step(self, batch: Batch, batch_idx):
         out = self.forward(batch)
         depth = out["depth"]
-        photo_loss, smooth_loss, scale_loss, recon = photometric_loss(batch, depth, out["pose"])
-        loss = photo_loss + 0.1 * smooth_loss + 0.1 * scale_loss
+        photo_loss, smooth_loss, pose_loss, scale_loss, recon = vio_loss(batch, depth, out["pose"])
+        loss = photo_loss + smooth_loss
         self.log_dict(
-            {"val_photo": photo_loss, "val_smooth": smooth_loss, "val_scale": scale_loss, "val_loss": loss},
+            {
+                "val_photo": photo_loss,
+                "val_smooth": smooth_loss,
+                "pose_loss": pose_loss,
+                "scale_loss": scale_loss,
+                "val_loss": loss,
+            },
             prog_bar=True,
             on_epoch=True,
             sync_dist=True,
@@ -149,6 +162,15 @@ class VioModule(pl.LightningModule):
                     publish_time=ts_ns[i],
                     message=last_world_pos[seq_name[i]],
                 )
+                msg = Point2()
+                msg.x = data["/imu_distance"][i]
+                msg.y = data["/imu_distance"][i]
+                mcap_writer_dict[seq_name[i]].write_message(
+                    topic="/imu_distance",
+                    log_time=ts_ns[i],
+                    publish_time=ts_ns[i],
+                    message=msg,
+                )
 
         for _, w in mcap_writer_dict.items():
             w.finish()
@@ -166,6 +188,7 @@ class VioModule(pl.LightningModule):
                 {
                     "/pred/pose": preds["pose"].cpu().numpy(),
                     "/pred/depth": preds["depth"].cpu().numpy(),
+                    "/imu_distance": batch["imu_dt"].cpu().numpy(),
                 },
             )
         )

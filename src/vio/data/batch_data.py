@@ -18,7 +18,7 @@ class CameraBatch(TypedDict):
     # Shape: [B, 7]
     extr: torch.Tensor
     # timediff to t-1 in seconds
-    # Shape: [B, 2]
+    # Shape: [B, 1]
     timediff_s: torch.Tensor
 
 
@@ -40,7 +40,8 @@ class Batch(TypedDict):
     # N-number of IMU readings [a_x, a_y, a_z, accel_x, accel_y, accel_z, timediff_s (to master ts_ns)]
     # Shape: [B, N] list of [7,] torch tensors
     imu: list[list[torch.Tensor]]
-
+    # How far did we move in meters from IMU list (this is kind of rough, but enough for scaling)
+    # Shape: [B, 1]
     imu_dt: torch.Tensor
 
     # ----------------------------------

@@ -2,25 +2,25 @@ name: vio
 max_epochs: 40
 accelerator: gpu
 devices: 1
-batch_size: 4
-num_workers: 4
-run_profiler: True
+batch_size: 16
+num_workers: 6
+run_profiler: False
 limit_train_batches: -1 # -1 to run all batches
 limit_val_batches: -1 # -1 to run all batches
 
 datasets:
-  - target_height: 448
-    target_width: 640
-    crop_top: 16
-    crop_bottom: 16
-    scale: 1.0
-    root_dir: "/datasets/vio_mcap/uzh"
   # - target_height: 448
   #   target_width: 640
-  #   crop_top: 0
-  #   crop_bottom: 0
-  #   scale: 1.069
-  #   root_dir: "/datasets/vio_mcap/eth"
+  #   crop_top: 16
+  #   crop_bottom: 16
+  #   scale: 1.0
+  #   root_dir: "/datasets/vio_mcap/uzh"
+  - target_height: 448
+    target_width: 640
+    crop_top: 0
+    crop_bottom: 0
+    scale: 1.069
+    root_dir: "/datasets/vio_mcap/eth"
 
 model:
   lr: 1e-4

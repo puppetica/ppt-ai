@@ -7,7 +7,7 @@ from mcap_protobuf.reader import McapProtobufMessage
 @dataclass
 class FrameBuffer:
     topic: str
-    size: int = 40
+    size: int = 100
     index: int = field(default=0, init=False)  # points to the current index in the buffer
     _data: list[tuple[int, McapProtobufMessage]] = field(default_factory=list, init=False)  # (timestamp_ns, data)
 

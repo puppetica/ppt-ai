@@ -1,9 +1,14 @@
+import math
+
 import torch
 import torch.nn.functional as F
 
-# -------------------- geometry utils --------------------
+from vio.data.batch_data import Batch
 
 
+# ----------------------------------------
+# ---------- Matrix Utilities ------------
+# ----------------------------------------
 def _normalize_quat(q: torch.Tensor) -> torch.Tensor:
     return q / (q.norm(dim=-1, keepdim=True) + 1e-8)
 
@@ -43,6 +48,7 @@ def _se3_from_tq(t: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
 
 
 def _invert_se3(T: torch.Tensor) -> torch.Tensor:
+    # NOTE: Faster closed inverse for a 4x4 transformation matrix
     # [B,4,4]
     R = T[:, :3, :3]
     t = T[:, :3, 3:4]
@@ -67,7 +73,44 @@ def _make_K(intr: torch.Tensor) -> torch.Tensor:
     return K
 
 
-def _meshgrid_xy(B: int, H: int, W: int, device, dtype):
+def _transform_points(T: torch.Tensor, X: torch.Tensor) -> torch.Tensor:
+    # T: [B,4,4], X: [B,3,H,W] -> [B,3,H,W]
+    B, _, H, W = X.shape
+    Xh = torch.cat([X.view(B, 3, -1), torch.ones(B, 1, H * W, device=X.device, dtype=X.dtype)], dim=1)  # [B,4,HW]
+    Yh = T @ Xh  # [B,4,HW]
+    Y = Yh[:, :3, :].view(B, 3, H, W)
+    return Y
+
+
+def quat_to_euler_rad(q):
+    # q: [B,4] = (x,y,z,w)
+    x = q[:, 0]
+    y = q[:, 1]
+    z = q[:, 2]
+    w = q[:, 3]
+
+    # roll (x axis)
+    t0 = 2.0 * (w * x + y * z)
+    t1 = 1.0 - 2.0 * (x * x + y * y)
+    roll = torch.atan2(t0, t1)
+
+    # pitch (y axis)
+    t2 = 2.0 * (w * y - z * x)
+    t2 = torch.clamp(t2, -1.0, 1.0)
+    pitch = torch.asin(t2)
+
+    # yaw (z axis)
+    t3 = 2.0 * (w * z + x * y)
+    t4 = 1.0 - 2.0 * (y * y + z * z)
+    yaw = torch.atan2(t3, t4)
+
+    return roll + pitch + yaw
+
+
+# ----------------------------------------
+# -------- Warpping Utilities ------------
+# ----------------------------------------
+def _meshgrid_xy(B: int, H: int, W: int, device, dtype) -> torch.Tensor:
     ys, xs = torch.meshgrid(
         torch.arange(H, device=device, dtype=dtype), torch.arange(W, device=device, dtype=dtype), indexing="ij"
     )
@@ -86,15 +129,6 @@ def _backproject(depth: torch.Tensor, Kinv: torch.Tensor) -> torch.Tensor:
     return X
 
 
-def _transform_points(T: torch.Tensor, X: torch.Tensor) -> torch.Tensor:
-    # T: [B,4,4], X: [B,3,H,W] -> [B,3,H,W]
-    B, _, H, W = X.shape
-    Xh = torch.cat([X.view(B, 3, -1), torch.ones(B, 1, H * W, device=X.device, dtype=X.dtype)], dim=1)  # [B,4,HW]
-    Yh = T @ Xh  # [B,4,HW]
-    Y = Yh[:, :3, :].view(B, 3, H, W)
-    return Y
-
-
 def _project(K: torch.Tensor, X: torch.Tensor, H: int, W: int) -> tuple[torch.Tensor, torch.Tensor]:
     # K: [B,3,3], X: [B,3,H,W] in camera frame -> grid: [B,H,W,2] in [-1,1]
     B = X.shape[0]
@@ -110,10 +144,10 @@ def _project(K: torch.Tensor, X: torch.Tensor, H: int, W: int) -> tuple[torch.Te
     return grid, valid
 
 
-# -------------------- photometric + smoothness --------------------
-
-
-def _ssim(x, y):
+# ----------------------------------------
+# ------------- Loss Calc ----------------
+# ----------------------------------------
+def _ssim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     # x,y: [B,3,H,W] in [0,1]
     C1, C2 = 0.01**2, 0.03**2
     mu_x = F.avg_pool2d(x, 3, 1, 1)
@@ -127,84 +161,145 @@ def _ssim(x, y):
     return torch.clamp((1 - ssim) / 2, 0, 1)  # [0,1]
 
 
-def _edge_aware_smoothness(depth: torch.Tensor, img_t: torch.Tensor):
-    # depth: [B,1,H,W], img_t: [B,3,H,W] in [0,1]
-    dx_depth = torch.abs(depth[:, :, :, 1:] - depth[:, :, :, :-1])
-    dy_depth = torch.abs(depth[:, :, 1:, :] - depth[:, :, :-1, :])
-    dx_img = torch.mean(torch.abs(img_t[:, :, :, 1:] - img_t[:, :, :, :-1]), dim=1, keepdim=True)
-    dy_img = torch.mean(torch.abs(img_t[:, :, 1:, :] - img_t[:, :, :-1, :]), dim=1, keepdim=True)
-    wx = torch.exp(-dx_img)
-    wy = torch.exp(-dy_img)
-    smooth = (dx_depth * wx).mean() + (dy_depth * wy).mean()
-    return smooth
+def logdepth_to_depth(d_raw, min_depth=0.1, max_depth=80.0):
+    # map raw -> [log(min), log(max)] via tanh
+    d_norm = 0.5 * (torch.tanh(d_raw) + 1.0)
+
+    log_min = math.log(min_depth)
+    log_max = math.log(max_depth)
+
+    log_depth = log_min + d_norm * (log_max - log_min)
+    depth = torch.exp(log_depth)
+    return depth
 
 
-# -------------------- main loss wiring --------------------
+def depth_smooth_loss(depth: torch.Tensor, img: torch.Tensor) -> torch.Tensor:
+    """Edege aware smoothness loss, make sure that depth is smooth, but not around image edges
+
+    Args:
+        depth (torch.Tensor): depth map
+        img (torch.Tensor): image (same size)
+
+    Returns:
+        torch.Tensor: loss
+    """
+    dx = torch.abs(depth[:, :, :, 1:] - depth[:, :, :, :-1])
+    dy = torch.abs(depth[:, :, 1:, :] - depth[:, :, :-1, :])
+
+    img_dx = torch.mean(torch.abs(img[:, :, :, 1:] - img[:, :, :, :-1]), dim=1, keepdim=True)
+    img_dy = torch.mean(torch.abs(img[:, :, 1:, :] - img[:, :, :-1, :]), dim=1, keepdim=True)
+
+    dx = dx * torch.exp(-img_dx)
+    dy = dy * torch.exp(-img_dy)
+
+    return dx.mean() + dy.mean()
 
 
-def photometric_loss(batch, pred_depth, pred_pose):
+def pose_regularizer(
+    pred_pose: torch.Tensor, dt: torch.Tensor, v_max: float = 180.0, w_max: float = 20.0
+) -> torch.Tensor:
+    """Regularize very large poses that could cause that the model finds a shortcut to mask out the full warpped image
+
+    Args:
+        pred_pose (torch.Tensor): predicted pose by the model [B, 7]
+        dt (torch.Tensor): time diff in seconds [B, 1]
+        v_max (float, optional): max velocity. Defaults to 180.0.
+        w_max (float, optional): max radial velocity. Defaults to 20.0.
+
+    Returns:
+        torch.Tensor: loss
+    """
+    # --- translation ---
+    dp = pred_pose[:, :3]  # delta translation
+    trans_dist = torch.norm(dp, dim=-1)  # m per step
+
+    trans_limit = v_max * dt  # per-step allowed m
+    trans_excess = F.relu(trans_dist - trans_limit)
+    trans_loss = (trans_excess**2).mean()
+
+    # --- rotation ---
+    dq = pred_pose[:, 3:7]
+    dq = dq / (dq.norm(dim=-1, keepdim=True) + 1e-8)
+    qw = dq[..., 3].clamp(-1.0, 1.0)
+    dtheta = 2.0 * torch.acos(qw)
+
+    rot_limit = w_max * dt  # allowed rad per step
+    rot_excess = F.relu(dtheta - rot_limit)
+    rot_loss = (rot_excess**2).mean()
+
+    return (1e-2 * trans_loss + 1e-1 * rot_loss).mean()
+
+
+def vio_loss(
+    batch: Batch, pred_depth: torch.Tensor, pred_pose: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Calculate photometric loss from input and output
+
+    Args:
+        batch (Batch): Batch for this frame
+        pred_depth (torch.Tensor): Depth pred for this frame from the model: [B, 1, H, W] with depth in meter
+        pred_pose (torch.Tensor): Pose pred or this frame from the model: [B, 7] as  [x, y, z, qx, qy, qz, qw]
+
+    Returns:
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: Return multiple losses:
+            Photometric loss: how similar are the original and warpped image on a feature level
+            Reconstruction loss: how similar are the original and warpped image on pixel level
+            reconstructed image: The resulting reconstructed image for validation/visu
+    """
     img_t = batch["cam_front"]["img"]  # [B,3,H,W]
     img_tm1 = batch["cam_front"]["img_tm1"]  # [B,3,H,W]
     intr = batch["cam_front"]["intr"]  # [B,4]
     extr = batch["cam_front"]["extr"]  # [B,7]
-    imu_dt = batch["imu_dt"]  # [B]  # <<< ADDED: integrated metric translation (meters)
+    imu_dt = batch["imu_dt"]  # [B, 1]
 
+    # Convert Depth prediction to proper depth values
     B, _, H, W = img_t.shape
-
     if pred_depth.shape[-2:] != (H, W):
-        depth_t = F.interpolate(pred_depth, size=(H, W), mode="bilinear", align_corners=False)
+        resized_pred_depth = F.interpolate(pred_depth, size=(H, W), mode="bilinear", align_corners=True)
     else:
-        depth_t = pred_depth
+        resized_pred_depth = pred_depth
+    depth_t = logdepth_to_depth(resized_pred_depth, 0.1, 255.0)
 
+    # Warp image based on predictions
     K = _make_K(intr)
-    Kinv = torch.inverse(K)
+    K_inv = torch.inverse(K)
 
-    T_ce = _se3_from_tq(extr[:, :3], extr[:, 3:7])
-    T_ec = _invert_se3(T_ce)
+    T = _se3_from_tq(extr[:, :3], extr[:, 3:7])
+    T_inv = _invert_se3(T)
 
     T_ego_tm1_to_t = _se3_from_tq(pred_pose[:, :3], pred_pose[:, 3:7])
-    T_cam_tm1_to_t = T_ec @ T_ego_tm1_to_t @ T_ce
+    T_ego_t_to_tm1 = _invert_se3(T_ego_tm1_to_t)
+    T_cam_t_to_tm1 = T_inv @ T_ego_t_to_tm1 @ T  # cam_t -> ego_t -> ego_t -> ego_tm1 -> ego_tm1 -> cam_tm1
 
-    X_cam_t = _backproject(depth_t, Kinv)
-    X_cam_tm1 = _transform_points(T_cam_tm1_to_t, X_cam_t)
+    X_cam_t = _backproject(depth_t, K_inv)
+    X_cam_tm1 = _transform_points(T_cam_t_to_tm1, X_cam_t)
+
     grid, valid = _project(K, X_cam_tm1, H, W)
-
-    # <<< ADDED: in-bounds mask
     gx, gy = grid[..., 0], grid[..., 1]
     inb = (gx > -1) & (gx < 1) & (gy > -1) & (gy < 1)
     mask = (valid & inb).float().unsqueeze(1)
+    recon_tm1 = F.grid_sample(img_t, grid, mode="bilinear", padding_mode="zeros")
 
-    recon = F.grid_sample(img_tm1, grid, mode="bilinear", padding_mode="border", align_corners=False)
+    # Calc image loss
+    ssim = _ssim(img_tm1, recon_tm1)
+    l1 = torch.abs(img_tm1 - recon_tm1).mean(dim=1, keepdim=True)
+    err_per_pixel = 0.85 * ssim.mean(dim=1, keepdim=True) + 0.15 * l1
+    photo_loss = (err_per_pixel * mask).sum() / (mask.sum() + 1e-6)
 
-    def photo_err(src, tgt):
-        ssim = _ssim(src, tgt)
-        l1 = torch.abs(src - tgt).mean(dim=1, keepdim=True)
-        return 0.85 * ssim.mean(dim=1, keepdim=True) + 0.15 * l1
+    # Calc depth smoothness loss (keep very small)
+    smooth_loss = depth_smooth_loss(depth_t, img_t)
 
-    err = photo_err(img_t, recon)  # t ← (t-1)
+    # Pose reg loss to avoid shortcut of just providing huge rotations and translations to get mask to 0
+    pose_reg = pose_regularizer(pred_pose, batch["cam_front"]["timediff_s"])
 
-    # <<< ADDED: identity auto-masking
-    err_id = photo_err(img_t, img_tm1)
-    keep = (err < err_id).float()
-    mask = mask * keep
+    # Scale loss based on imu measurement
+    trans_pred = pred_pose[:, :3].norm(dim=1)
+    scale_loss = 0.001 * F.l1_loss(torch.log(trans_pred + 1e-6), torch.log(imu_dt + 1e-6))
 
-    photo_loss = (err * mask).sum() / (mask.sum() + 1e-6)
-
-    # <<< ADDED: inverse-depth smoothness (scale-normalized)
-    inv = 1.0 / (depth_t + 1e-6)
-    inv = inv / (inv.mean(dim=[2, 3], keepdim=True) + 1e-6)
-    dx = torch.abs(inv[:, :, :, 1:] - inv[:, :, :, :-1])
-    dy = torch.abs(inv[:, :, 1:, :] - inv[:, :, :-1, :])
-    dx_img = torch.mean(torch.abs(img_t[:, :, :, 1:] - img_t[:, :, :, :-1]), dim=1, keepdim=True)
-    dy_img = torch.mean(torch.abs(img_t[:, :, 1:, :] - img_t[:, :, :-1, :]), dim=1, keepdim=True)
-    wx = torch.exp(-dx_img)
-    wy = torch.exp(-dy_img)
-    smooth_loss = (dx * wx).mean() + (dy * wy).mean()
-
-    # <<< ADDED: IMU scale alignment
-    trans_norm_pred = pred_pose[:, :3].norm(dim=1)
-    s_pred = trans_norm_pred.mean()
-    s_imu = imu_dt.mean()
-    scale_loss = F.l1_loss(s_pred, s_imu)
-
-    return photo_loss, smooth_loss, scale_loss, recon
+    return (
+        photo_loss,
+        smooth_loss,
+        pose_reg,
+        scale_loss,
+        recon_tm1,
+    )

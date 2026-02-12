@@ -5,6 +5,7 @@ import random
 import torch
 from torch.utils.data import IterableDataset, get_worker_info
 
+from vio.data.augmentation import gen_aug_set
 from vio.data.batch_data import Batch, CameraBatch
 from vio.data.mcap_streamer import McapStreamer
 from vio.enums import DataSplit
@@ -91,7 +92,9 @@ class McapDataset(IterableDataset):
         seq_idx = 0
         while True:
             if len(self.mcap_streamer_queue) < self.max_batch_size and seq_idx < len(mcap_files_set):
-                streamer = McapStreamer(*self.streamer_args, mcap_path=mcap_files_set[seq_idx])
+                streamer = McapStreamer(
+                    *self.streamer_args, mcap_path=mcap_files_set[seq_idx], do_aug=self.data_split == DataSplit.TRAIN
+                )
                 self.mcap_streamer_queue.append(iter(streamer))
                 seq_idx += 1
                 continue

@@ -1,5 +1,5 @@
 name: vio
-path: .logger/vio_2025-10-28-19-39-17
+path: .logger/vio_2025-11-10-17-44-15
 checkpoint: last.ckpt
 train_cfg: cfg.yaml
 
